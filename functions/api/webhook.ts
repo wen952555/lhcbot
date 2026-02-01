@@ -1,24 +1,30 @@
 
-import { generateDeterministicPrediction } from '../analysis';
+import { generateDeterministicPrediction } from '../../analysis';
 
 export async function onRequestPost(context: any) {
   const { request, env } = context;
 
   try {
+    console.log("[Webhook] Incoming request received"); // Log for debugging in Cloudflare Dashboard
+
     const payload = await request.json();
     
     // 1. Basic Validation
     if (!payload.message || !payload.message.text) {
+      console.log("[Webhook] No message text found, ignoring");
       return new Response('OK');
     }
 
     const chatId = payload.message.chat.id;
     const text = payload.message.text.trim();
     const userId = payload.message.from?.id;
+    
+    console.log(`[Webhook] User: ${userId}, Command: ${text}`);
 
     // 2. Auth Check
     const adminId = env.TG_ADMIN_ID ? parseInt(env.TG_ADMIN_ID) : null;
     if (adminId && userId !== adminId) {
+       console.log(`[Webhook] Unauthorized access attempt by ${userId}`);
        await sendTelegramMessage(env.TG_BOT_TOKEN, chatId, "⛔ 权限不足");
        return new Response('Unauthorized');
     }
@@ -36,7 +42,7 @@ export async function onRequestPost(context: any) {
       // Notify processing
       await sendTelegramMessage(env.TG_BOT_TOKEN, chatId, `⏳ 正在分析 [${lotteryId}] 数据...`);
 
-      // 4. Fetch History Data (Reuse logic similar to predict.ts but simplified)
+      // 4. Fetch History Data
       let historyData = [];
       
       // Try to get from DB history first
@@ -89,7 +95,7 @@ export async function onRequestPost(context: any) {
 
     return new Response('OK');
   } catch (err: any) {
-    console.error(err);
+    console.error("[Webhook Error]", err);
     return new Response(err.message, { status: 500 });
   }
 }
