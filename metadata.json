@@ -1,5 +1,5 @@
 {
-  "name": "Mark Six AI Oracle",
-  "description": "A sophisticated Mark Six lottery prediction and analysis platform powered by Gemini AI. Features historical data visualization, statistical analysis, and AI-driven number suggestions.",
+  "name": "六合彩 AI 预测大师",
+  "description": "基于 Gemini AI 的六合彩预测与分析平台。提供历史数据可视化、统计分析及 AI 智能选号功能。",
   "requestFramePermissions": []
 }

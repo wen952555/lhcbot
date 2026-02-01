@@ -23,3 +23,9 @@ export enum TabType {
   STATS = 'stats',
   HISTORY = 'history'
 }
+
+export interface LotteryConfig {
+  id: string;
+  name: string;
+  apiUrl: string;
+}

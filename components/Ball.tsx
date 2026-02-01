@@ -1,25 +1,35 @@
 
 import React from 'react';
-import { getNumberColor } from '../constants';
+import { getNumberColor, NUMBER_MAP } from '../constants';
 
 interface BallProps {
   number: number;
   isSpecial?: boolean;
   size?: 'sm' | 'md' | 'lg';
+  showZodiac?: boolean;
 }
 
-const Ball: React.FC<BallProps> = ({ number, isSpecial = false, size = 'md' }) => {
+const Ball: React.FC<BallProps> = ({ number, isSpecial = false, size = 'md', showZodiac = true }) => {
   const sizeClasses = {
-    sm: 'w-8 h-8 text-sm',
-    md: 'w-12 h-12 text-lg',
+    sm: 'w-8 h-8 text-xs',
+    md: 'w-12 h-12 text-base font-bold',
     lg: 'w-16 h-16 text-2xl font-bold'
   };
 
-  const baseColor = isSpecial ? 'bg-purple-600' : getNumberColor(number);
+  const info = NUMBER_MAP[number];
+  const formattedNumber = number.toString().padStart(2, '0');
+  const baseColor = getNumberColor(number);
 
   return (
-    <div className={`${sizeClasses[size]} ${baseColor} rounded-full flex items-center justify-center text-white shadow-xl lottery-ball transform transition-transform hover:scale-110 cursor-default border-t border-white/20`}>
-      {number}
+    <div className="flex flex-col items-center gap-1 group">
+      <div className={`${sizeClasses[size]} ${baseColor} rounded-full flex items-center justify-center text-white shadow-xl lottery-ball transform transition-all group-hover:scale-110 cursor-default border-t border-white/30 relative`}>
+        {formattedNumber}
+      </div>
+      {showZodiac && info && (
+        <span className={`text-[10px] font-bold ${info.color === 'red' ? 'text-red-400' : info.color === 'blue' ? 'text-blue-400' : 'text-emerald-400'}`}>
+          {info.zodiac}
+        </span>
+      )}
     </div>
   );
 };

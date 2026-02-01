@@ -1,29 +1,96 @@
 
-import { DrawResult } from './types';
+import { LotteryConfig } from './types';
 
-export const MOCK_HISTORY: DrawResult[] = [
-  { drawNumber: "24/025", date: "2024-03-05", numbers: [3, 12, 18, 24, 33, 41], specialNumber: 7 },
-  { drawNumber: "24/024", date: "2024-03-03", numbers: [8, 15, 22, 29, 36, 45], specialNumber: 13 },
-  { drawNumber: "24/023", date: "2024-03-01", numbers: [1, 10, 20, 30, 40, 49], specialNumber: 5 },
-  { drawNumber: "24/022", date: "2024-02-27", numbers: [5, 14, 21, 28, 35, 42], specialNumber: 9 },
-  { drawNumber: "24/021", date: "2024-02-25", numbers: [7, 11, 19, 23, 31, 47], specialNumber: 2 },
-  { drawNumber: "24/020", date: "2024-02-22", numbers: [2, 16, 25, 34, 43, 48], specialNumber: 15 },
-  { drawNumber: "24/019", date: "2024-02-20", numbers: [6, 17, 26, 37, 44, 46], specialNumber: 11 },
-  { drawNumber: "24/018", date: "2024-02-18", numbers: [4, 13, 27, 32, 38, 39], specialNumber: 8 },
+export const LOTTERY_CONFIGS: LotteryConfig[] = [
+  { 
+    id: 'macau_jc', 
+    name: '澳门六合彩', 
+    apiUrl: 'https://api.example.com/lottery/macau' 
+  },
+  { 
+    id: 'new_macau', 
+    name: '新澳门六合彩', 
+    apiUrl: 'https://api.example.com/lottery/new' 
+  },
+  { 
+    id: 'old_macau', 
+    name: '老六合彩', 
+    apiUrl: 'https://api.example.com/lottery/old' 
+  }
 ];
 
+export interface NumberInfo {
+  zodiac: string;
+  color: 'red' | 'blue' | 'green';
+  isEven: boolean;
+}
+
+// 2025 蛇年映射数据
+export const NUMBER_MAP: Record<number, NumberInfo> = {
+  1: { zodiac: '蛇', color: 'red', isEven: false },
+  2: { zodiac: '龙', color: 'red', isEven: true },
+  3: { zodiac: '兔', color: 'blue', isEven: false },
+  4: { zodiac: '虎', color: 'blue', isEven: true },
+  5: { zodiac: '牛', color: 'green', isEven: false },
+  6: { zodiac: '鼠', color: 'green', isEven: true },
+  7: { zodiac: '猪', color: 'red', isEven: false },
+  8: { zodiac: '狗', color: 'red', isEven: true },
+  9: { zodiac: '鸡', color: 'blue', isEven: false },
+  10: { zodiac: '猴', color: 'blue', isEven: true },
+  11: { zodiac: '羊', color: 'green', isEven: false },
+  12: { zodiac: '马', color: 'red', isEven: true },
+  13: { zodiac: '蛇', color: 'red', isEven: false },
+  14: { zodiac: '龙', color: 'blue', isEven: true },
+  15: { zodiac: '兔', color: 'blue', isEven: false },
+  16: { zodiac: '虎', color: 'green', isEven: true },
+  17: { zodiac: '牛', color: 'green', isEven: false },
+  18: { zodiac: '鼠', color: 'red', isEven: true },
+  19: { zodiac: '猪', color: 'red', isEven: false },
+  20: { zodiac: '狗', color: 'blue', isEven: true },
+  21: { zodiac: '鸡', color: 'green', isEven: false },
+  22: { zodiac: '猴', color: 'green', isEven: true },
+  23: { zodiac: '羊', color: 'red', isEven: false },
+  24: { zodiac: '马', color: 'red', isEven: true },
+  25: { zodiac: '蛇', color: 'blue', isEven: false },
+  26: { zodiac: '龙', color: 'blue', isEven: true },
+  27: { zodiac: '兔', color: 'green', isEven: false },
+  28: { zodiac: '虎', color: 'green', isEven: true },
+  29: { zodiac: '牛', color: 'red', isEven: false },
+  30: { zodiac: '鼠', color: 'red', isEven: true },
+  31: { zodiac: '猪', color: 'blue', isEven: false },
+  32: { zodiac: '狗', color: 'green', isEven: true },
+  33: { zodiac: '鸡', color: 'green', isEven: false },
+  34: { zodiac: '猴', color: 'red', isEven: true },
+  35: { zodiac: '羊', color: 'red', isEven: false },
+  36: { zodiac: '马', color: 'blue', isEven: true },
+  37: { zodiac: '蛇', color: 'blue', isEven: false },
+  38: { zodiac: '龙', color: 'green', isEven: true },
+  39: { zodiac: '兔', color: 'green', isEven: false },
+  40: { zodiac: '虎', color: 'red', isEven: true },
+  41: { zodiac: '牛', color: 'blue', isEven: false },
+  42: { zodiac: '鼠', color: 'blue', isEven: true },
+  43: { zodiac: '猪', color: 'green', isEven: false },
+  44: { zodiac: '狗', color: 'green', isEven: true },
+  45: { zodiac: '鸡', color: 'red', isEven: false },
+  46: { zodiac: '猴', color: 'red', isEven: true },
+  47: { zodiac: '羊', color: 'blue', isEven: false },
+  48: { zodiac: '马', color: 'blue', isEven: true },
+  49: { zodiac: '蛇', color: 'green', isEven: false }
+};
+
 export const COLORS = {
-  RED: 'bg-red-500',
-  GREEN: 'bg-emerald-500',
-  BLUE: 'bg-blue-500',
-  GOLD: 'bg-amber-500',
+  red: 'bg-red-500',
+  blue: 'bg-blue-500',
+  green: 'bg-emerald-500',
   SPECIAL: 'bg-purple-600'
 };
 
+export const COLOR_NAMES = {
+  red: '红波',
+  blue: '蓝波',
+  green: '绿波'
+};
+
 export const getNumberColor = (num: number): string => {
-  if (num <= 10) return COLORS.RED;
-  if (num <= 20) return COLORS.BLUE;
-  if (num <= 30) return COLORS.GREEN;
-  if (num <= 40) return COLORS.GOLD;
-  return 'bg-slate-500';
+  return COLORS[NUMBER_MAP[num]?.color] || 'bg-slate-500';
 };
