@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Trophy, CheckCircle2, XCircle } from 'lucide-react';
 import { DrawResult, PredictionHistoryItem } from '../types';
@@ -11,7 +10,7 @@ interface PredictionHistoryListProps {
 
 export const PredictionHistoryList: React.FC<PredictionHistoryListProps> = ({ predictions, drawHistory }) => {
   if (predictions.length === 0) return (
-      <div className="text-center py-8 text-slate-500 text-xs">
+      <div className="text-center py-8 text-slate-400 text-xs">
           暂无预测记录
       </div>
   );
@@ -43,9 +42,9 @@ export const PredictionHistoryList: React.FC<PredictionHistoryListProps> = ({ pr
                    <div className="absolute -right-2 -top-2 w-12 h-12 bg-emerald-500/10 rounded-full blur-xl"></div>
                )}
 
-              <div className="flex flex-col gap-1 w-16 flex-shrink-0 border-r border-slate-700/50 pr-2">
-                <span className="text-slate-300 font-mono text-xs font-bold">{pred.drawNumber}</span>
-                <span className="text-slate-600 text-[9px]">
+              <div className="flex flex-col gap-1 w-16 flex-shrink-0 border-r border-slate-200 pr-2">
+                <span className="text-slate-700 font-mono text-xs font-bold">{pred.drawNumber}</span>
+                <span className="text-slate-400 text-[9px]">
                     {new Date(pred.timestamp).toLocaleDateString()}
                 </span>
               </div>
@@ -53,7 +52,7 @@ export const PredictionHistoryList: React.FC<PredictionHistoryListProps> = ({ pr
               <div className="flex-1 px-4">
                   <div className="flex gap-1 flex-wrap mb-1">
                       {pred.prediction.zodiacs.slice(0, 6).map((z, idx) => (
-                          <span key={idx} className={`text-[10px] w-5 h-5 flex items-center justify-center rounded-full ${z === resultZodiac ? 'bg-amber-500 text-white font-bold' : 'bg-slate-700 text-slate-400'}`}>
+                          <span key={idx} className={`text-[10px] w-5 h-5 flex items-center justify-center rounded-full shadow-sm ${z === resultZodiac ? 'bg-amber-500 text-white font-bold' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
                               {z}
                           </span>
                       ))}
@@ -64,18 +63,18 @@ export const PredictionHistoryList: React.FC<PredictionHistoryListProps> = ({ pr
                   </div>
               </div>
 
-              <div className="flex flex-col items-center justify-center w-10 flex-shrink-0 pl-2 border-l border-slate-700/50">
+              <div className="flex flex-col items-center justify-center w-10 flex-shrink-0 pl-2 border-l border-slate-200">
                  {status === 'pending' ? (
-                     <span className="text-[10px] text-slate-500">待开</span>
+                     <span className="text-[10px] text-slate-400">待开</span>
                  ) : status === 'win' ? (
                      <>
                         <CheckCircle2 className="w-5 h-5 text-emerald-500 mb-0.5" />
-                        <span className="text-[9px] text-emerald-500 font-bold">准</span>
+                        <span className="text-[9px] text-emerald-600 font-bold">准</span>
                      </>
                  ) : (
                      <>
                         <XCircle className="w-5 h-5 text-red-500 mb-0.5" />
-                        <span className="text-[9px] text-red-500 font-bold">错</span>
+                        <span className="text-[9px] text-red-600 font-bold">错</span>
                      </>
                  )}
               </div>

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { getNumberColor, NUMBER_MAP } from '../constants';
 
@@ -22,11 +21,11 @@ const Ball: React.FC<BallProps> = ({ number, isSpecial = false, size = 'md', sho
 
   return (
     <div className="flex flex-col items-center gap-1 group">
-      <div className={`${sizeClasses[size]} ${baseColor} rounded-full flex items-center justify-center text-white shadow-xl lottery-ball transform transition-all group-hover:scale-110 cursor-default border-t border-white/30 relative`}>
+      <div className={`${sizeClasses[size]} ${baseColor} rounded-full flex items-center justify-center text-white shadow-md lottery-ball transform transition-all group-hover:scale-110 cursor-default border-t border-white/40 relative`}>
         {formattedNumber}
       </div>
       {showZodiac && info && (
-        <span className={`text-[10px] font-bold ${info.color === 'red' ? 'text-red-400' : info.color === 'blue' ? 'text-blue-400' : 'text-emerald-400'}`}>
+        <span className={`text-[10px] font-bold ${info.color === 'red' ? 'text-red-500' : info.color === 'blue' ? 'text-blue-500' : 'text-emerald-600'}`}>
           {info.zodiac}
         </span>
       )}

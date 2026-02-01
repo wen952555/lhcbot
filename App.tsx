@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { DrawResult, LotteryConfig, PredictionResult, PredictionHistoryItem } from './types';
 import { LOTTERY_CONFIGS } from './constants';
@@ -76,7 +75,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-slate-100 font-sans selection:bg-amber-500/30 pb-10">
+    <div className="min-h-screen bg-slate-100 text-slate-800 font-sans selection:bg-amber-500/30 pb-10">
       <LotteryTabs 
         configs={LOTTERY_CONFIGS}
         selected={selectedLottery}
@@ -100,16 +99,16 @@ const App: React.FC = () => {
       <div className="px-4 mt-8 flex gap-3">
           <button 
             onClick={() => setActiveSection(activeSection === 'history' ? 'none' : 'history')}
-            className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all
-                ${activeSection === 'history' ? 'bg-slate-700 text-white ring-1 ring-slate-500' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}
+            className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm border
+                ${activeSection === 'history' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
           >
              <History className="w-4 h-4" /> 历史开奖
           </button>
           
           <button 
             onClick={() => setActiveSection(activeSection === 'prediction_history' ? 'none' : 'prediction_history')}
-            className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all
-                ${activeSection === 'prediction_history' ? 'bg-amber-900/40 text-amber-400 ring-1 ring-amber-500/50' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}
+            className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm border
+                ${activeSection === 'prediction_history' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
           >
              <Trophy className="w-4 h-4" /> 预测战绩
           </button>
