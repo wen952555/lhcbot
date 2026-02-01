@@ -14,13 +14,12 @@ export async function onRequestPost(context: any) {
   try {
     const payload = await request.json();
     
-    // 移除 callback_query 处理，因为不再使用内联键盘
+    // 不再处理 callback_query (内联按钮已移除)
     if (payload.callback_query) {
-        await answerCallbackQuery(env.TG_BOT_TOKEN, payload.callback_query.id, "此菜单已过期");
         return new Response('OK');
     }
 
-    // 处理普通消息 (主菜单)
+    // 处理普通消息
     if (payload.message) {
       return await handleMessage(payload.message, env);
     }
@@ -37,103 +36,92 @@ async function handleMessage(message: any, env: any) {
   const text = message.text?.trim();
   const userId = message.from?.id;
 
-  // 简单的权限检查 (如需限制非管理员使用某些功能)
+  // 简单的权限检查
   const adminId = env.TG_ADMIN_ID ? parseInt(env.TG_ADMIN_ID) : null;
   const isAdmin = adminId && userId === adminId;
 
   // 命令路由
   switch (text) {
       case '/start':
-      case '/menu':
-          await sendMainMenu(env.TG_BOT_TOKEN, chatId);
+      case '/help':
+          await sendHelpMessage(env.TG_BOT_TOKEN, chatId);
           break;
-      case '🔄 一键同步所有':
+          
+      case '一键预测':
+      case '/predict':
+          await doBatchPredictInBot(env, chatId);
+          break;
+
+      case '一键查看记录':
+      case '/history':
+          await doBatchViewInBot(env, chatId);
+          break;
+
+      case '一键同步':
+      case '/sync':
           if (!isAdmin) {
              await sendMessage(env.TG_BOT_TOKEN, chatId, "⛔ 只有管理员可以使用同步功能");
              return;
           }
           await doSyncAll(env, chatId);
           break;
-      case '🔮 一键预测':
-          // 连续发送3个彩种的预测结果到当前Bot聊天窗口
-          await doBatchPredictInBot(env, chatId);
-          break;
-      case '📊 一键查看记录':
-          // 连续发送3个彩种的历史记录到当前Bot聊天窗口
-          await doBatchViewInBot(env, chatId);
-          break;
-      case '📢 推送频道':
+
+      case '推送频道':
+      case '/push':
           if (!isAdmin) {
              await sendMessage(env.TG_BOT_TOKEN, chatId, "⛔ 只有管理员可以使用推送功能");
              return;
           }
           await doPushAllToChannel(env, chatId);
           break;
+      
       default:
-          // 如果是未知文本，默认显示菜单
-          await sendMainMenu(env.TG_BOT_TOKEN, chatId);
+          // 不回复默认消息，或者回复帮助信息
+          // await sendHelpMessage(env.TG_BOT_TOKEN, chatId);
+          break;
   }
 
   return new Response('OK');
 }
 
-// --- Menu Functions ---
+// --- Interaction Functions ---
 
-async function sendMainMenu(token: string, chatId: number) {
-  // 简单明了的文本命令键盘
-  const keyboard = [
-    [{ text: '🔮 一键预测' }, { text: '📊 一键查看记录' }],
-    [{ text: '🔄 一键同步所有' }, { text: '📢 推送频道' }]
-  ];
+async function sendHelpMessage(token: string, chatId: number) {
+  const msg = "🤖 <b>六合大数据助手</b>\n\n" +
+              "请直接发送以下文本命令：\n\n" +
+              "🔮 <b>一键预测</b> - 获取所有彩种预测结果\n" +
+              "📊 <b>一键查看记录</b> - 获取所有彩种历史记录\n\n" +
+              "⚙️ <b>管理员命令：</b>\n" +
+              "🔄 <b>一键同步</b> - 同步最新数据\n" +
+              "📢 <b>推送频道</b> - 推送预测到频道";
 
-  await sendMessage(token, chatId, "🤖 <b>六合大数据助手</b>\n请选择操作：", {
-    reply_markup: {
-      keyboard: keyboard,
-      resize_keyboard: true,
-      one_time_keyboard: false
-    }
+  // 发送消息并移除键盘 (remove_keyboard)
+  await sendMessage(token, chatId, msg, {
+      reply_markup: { remove_keyboard: true }
   });
 }
 
 // --- Logic Functions ---
 
-// 1. 一键同步所有
-async function doSyncAll(env: any, chatId: number) {
-    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 开始同步所有彩种数据...");
-    
-    let report = "<b>🔄 同步结果报告</b>\n------------------\n";
-    
-    for (const lottery of LOTTERIES) {
-        try {
-            const count = await syncLotteryData(env, lottery);
-            report += `✅ <b>${lottery.name}</b>: 更新 ${count} 条\n`;
-        } catch (e: any) {
-            report += `❌ <b>${lottery.name}</b>: 失败 (${e.message})\n`;
-        }
-    }
-    
-    await sendMessage(env.TG_BOT_TOKEN, chatId, report);
-}
-
-// 2. 批量预测 (直接发给 Bot 用户)
+// 1. 批量预测 (直接发给 Bot 用户，连续3条)
 async function doBatchPredictInBot(env: any, chatId: number) {
-    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在生成所有彩种预测...");
+    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在生成预测，请稍候...");
 
     for (const lottery of LOTTERIES) {
         try {
             const { message } = await generatePredictionMessage(env, lottery.id);
             await sendMessage(env.TG_BOT_TOKEN, chatId, message);
-            // 稍微延迟一下，保证消息顺序且不触发频率限制
-            await new Promise(r => setTimeout(r, 800)); 
+            // 延迟防止消息乱序
+            await new Promise(r => setTimeout(r, 1000)); 
         } catch (e: any) {
-            await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ [${lottery.name}] 预测生成失败: ${e.message}`);
+            await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ <b>[${lottery.name}]</b> 预测失败: ${e.message}`);
         }
     }
 }
 
-// 3. 批量查看记录 (直接发给 Bot 用户)
+// 2. 批量查看记录 (直接发给 Bot 用户，连续3条)
 async function doBatchViewInBot(env: any, chatId: number) {
-    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在获取所有彩种记录...");
+    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在获取历史记录...");
 
     if (!env.DB) {
         await sendMessage(env.TG_BOT_TOKEN, chatId, "❌ 数据库未连接");
@@ -150,7 +138,7 @@ async function doBatchViewInBot(env: any, chatId: number) {
             `).bind(lottery.id).all();
 
             if (!results || results.length === 0) {
-                await sendMessage(env.TG_BOT_TOKEN, chatId, `📭 [${lottery.name}] 暂无记录，请先同步。`);
+                await sendMessage(env.TG_BOT_TOKEN, chatId, `📭 <b>[${lottery.name}]</b> 暂无记录，请先同步。`);
                 continue;
             }
 
@@ -162,12 +150,30 @@ async function doBatchViewInBot(env: any, chatId: number) {
             });
 
             await sendMessage(env.TG_BOT_TOKEN, chatId, msg);
-            await new Promise(r => setTimeout(r, 800)); // 延迟防止乱序
+            await new Promise(r => setTimeout(r, 1000)); // 延迟
 
         } catch (e: any) {
-            await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ [${lottery.name}] 查询失败: ${e.message}`);
+            await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ <b>[${lottery.name}]</b> 查询失败: ${e.message}`);
         }
     }
+}
+
+// 3. 一键同步所有
+async function doSyncAll(env: any, chatId: number) {
+    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 开始同步所有彩种数据...");
+    
+    let report = "<b>🔄 同步结果报告</b>\n------------------\n";
+    
+    for (const lottery of LOTTERIES) {
+        try {
+            const count = await syncLotteryData(env, lottery);
+            report += `✅ <b>${lottery.name}</b>: 更新 ${count} 条\n`;
+        } catch (e: any) {
+            report += `❌ <b>${lottery.name}</b>: 失败 (${e.message})\n`;
+        }
+    }
+    
+    await sendMessage(env.TG_BOT_TOKEN, chatId, report);
 }
 
 // 4. 推送全部到频道 (管理员功能)
@@ -187,7 +193,7 @@ async function doPushAllToChannel(env: any, adminChatId: number) {
             const { message } = await generatePredictionMessage(env, lottery.id);
             await sendMessage(env.TG_BOT_TOKEN, channelId, message);
             successCount++;
-            await new Promise(r => setTimeout(r, 2000)); // 推送频道间隔稍微长一点
+            await new Promise(r => setTimeout(r, 2000)); // 频道推送间隔需稍长
         } catch (e: any) {
             console.error(`Push failed for ${lottery.name}`, e);
             await sendMessage(env.TG_BOT_TOKEN, adminChatId, `⚠️ [${lottery.name}] 推送失败: ${e.message}`);
@@ -344,13 +350,4 @@ async function sendMessage(token: string, chatId: number | string, text: string,
   } catch (error) {
       console.error("Fetch Error:", error);
   }
-}
-
-async function answerCallbackQuery(token: string, callbackQueryId: string, text: string) {
-  if(!token) return;
-  await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ callback_query_id: callbackQueryId, text: text })
-  });
 }
