@@ -1,9 +1,4 @@
 
-import { NUMBER_MAP } from '../constants'; // We need to access NUMBER_MAP but it's a frontend file. 
-// Ideally constant data should be shared, but for Functions we'll replicate or import if configured. 
-// Since we are in an ES module environment in Pages Functions, we'll redefine the mapping helper here for safety 
-// or assume we can import if the build system allows. To be safe, I will inline the necessary map logic.
-
 // --- Helper Data for Backend ---
 const ZODIACS = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
 // A simple function to get zodiac for a number (assuming 2025 Snake Year logic matching constants.tsx)

@@ -1,5 +1,5 @@
 
-import { generateDeterministicPrediction } from '../../analysis';
+import { generateDeterministicPrediction } from '../analysis';
 
 export async function onRequestPost(context: any) {
   const { request, env } = context;
@@ -77,7 +77,7 @@ export async function onRequestPost(context: any) {
                   `🎱 **18码**: ${prediction.numbers_18.join(',')}\n` +
                   `🔢 **头数**: ${prediction.heads.join(', ')}头\n` +
                   `🔚 **尾数**: ${prediction.tails.join(', ')}尾\n` +
-                  `🎨 **波色**: ${prediction.colors.map(c => c==='red'?'红':c==='blue'?'蓝':'绿').join(' ')}`;
+                  `🎨 **波色**: ${prediction.colors.map((c: string) => c==='red'?'红':c==='blue'?'蓝':'绿').join(' ')}`;
 
       await sendTelegramMessage(env.TG_BOT_TOKEN, chatId, msg);
     } else {
