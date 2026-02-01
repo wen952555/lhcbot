@@ -4,18 +4,15 @@ import { LotteryConfig } from './types';
 export const LOTTERY_CONFIGS: LotteryConfig[] = [
   { 
     id: 'new_macau', 
-    name: '新澳门六合', 
-    apiUrl: 'https://api.example.com/lottery/new' 
+    name: '新澳门六合'
   },
   { 
     id: 'hk_jc', 
-    name: '香港六合彩', 
-    apiUrl: 'https://api.example.com/lottery/hk' 
+    name: '香港六合彩'
   },
   { 
     id: 'old_macau', 
-    name: '老澳门六合', 
-    apiUrl: 'https://api.example.com/lottery/macau' 
+    name: '老澳门六合'
   }
 ];
 

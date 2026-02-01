@@ -27,5 +27,4 @@ export enum TabType {
 export interface LotteryConfig {
   id: string;
   name: string;
-  apiUrl: string;
 }

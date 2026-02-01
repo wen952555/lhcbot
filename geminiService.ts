@@ -9,8 +9,7 @@ export const fetchLotteryHistory = async (config: LotteryConfig): Promise<{ hist
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ 
-        apiUrl: config.apiUrl,
-        lotteryName: config.name
+        lotteryId: config.id
       }),
     });
 
