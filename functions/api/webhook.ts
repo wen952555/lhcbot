@@ -86,6 +86,7 @@ async function executeAction(env: any, chatId: number, action: string, lotteryId
     }
   } catch (err: any) {
     console.error(err);
+    // Try to send error message, fallback to plain text if needed is handled in sendMessage
     await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ 操作失败: ${err.message}`);
   }
 }
@@ -102,8 +103,8 @@ async function sendKeyboardMenu(token: string, chatId: number) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       chat_id: chatId,
-      text: "👋 **管理控制台**\n\n请点击下方键盘按钮进行操作：",
-      parse_mode: 'Markdown',
+      text: "👋 <b>管理控制台</b>\n\n请点击下方键盘按钮进行操作：",
+      parse_mode: 'HTML',
       reply_markup: {
         keyboard: keyboard,
         resize_keyboard: true,
@@ -138,16 +139,14 @@ async function doPredict(env: any, chatId: number, lotteryId: string) {
       return;
   }
 
-  // Calculate next draw number (Simple heuristic: current + 1)
-  // This ensures the prediction is associated with the UPCOMING draw.
+  // Calculate next draw number
   let nextDrawNumber = "Unknown";
   try {
       const lastDraw = historyData[0].drawNumber;
-      // Try parsing as BigInt to handle large IDs, then fallback
       const nextVal = BigInt(lastDraw) + 1n;
       nextDrawNumber = nextVal.toString();
   } catch (e) {
-      console.warn("Could not calculate next draw number automatically", e);
+      console.warn("Could not calculate next draw number", e);
       nextDrawNumber = `${historyData[0].drawNumber}_NEXT`;
   }
 
@@ -156,28 +155,25 @@ async function doPredict(env: any, chatId: number, lotteryId: string) {
   const now = Date.now();
 
   if (env.DB) {
-      // 1. Save as 'Current' prediction
       await env.DB.prepare(`
         INSERT OR REPLACE INTO admin_predictions (lottery_id, data, updated_at)
         VALUES (?, ?, ?)
       `).bind(lotteryId, jsonPrediction, now).run();
 
-      // 2. Save to History (for Win/Loss record)
       await env.DB.prepare(`
         INSERT OR REPLACE INTO prediction_history (lottery_id, draw_number, data, created_at)
         VALUES (?, ?, ?, ?)
       `).bind(lotteryId, nextDrawNumber, jsonPrediction, now).run();
   }
 
-  // UPDATED: Show ALL 18 numbers (removed .slice)
-  const msg = `✅ **[${lotteryName}] 第 ${nextDrawNumber} 期 预测成功**\n` +
+  const msg = `✅ <b>[${lotteryName}] 第 ${nextDrawNumber} 期 预测成功</b>\n` +
               `------------------------------\n` +
-              `🐯 **六肖**: ${prediction.zodiacs.join(' ')}\n` +
-              `🎱 **18码**: ${prediction.numbers_18.join(',')}\n` +
-              `🔢 **头数**: ${prediction.heads.join(', ')}头\n` +
-              `🔚 **尾数**: ${prediction.tails.join(', ')}尾\n` +
-              `🎨 **波色**: ${prediction.colors.map((c: string) => c==='red'?'红':c==='blue'?'蓝':'绿').join(' ')}\n` +
-              `💡 **理由**: ${prediction.reasoning}`;
+              `🐯 <b>六肖</b>: ${prediction.zodiacs.join(' ')}\n` +
+              `🎱 <b>18码</b>: ${prediction.numbers_18.join(',')}\n` +
+              `🔢 <b>头数</b>: ${prediction.heads.join(', ')}头\n` +
+              `🔚 <b>尾数</b>: ${prediction.tails.join(', ')}尾\n` +
+              `🎨 <b>波色</b>: ${prediction.colors.map((c: string) => c==='red'?'红':c==='blue'?'蓝':'绿').join(' ')}\n` +
+              `💡 <b>理由</b>: ${prediction.reasoning}`;
 
   await sendMessage(env.TG_BOT_TOKEN, chatId, msg);
 }
@@ -300,29 +296,56 @@ async function doViewRecords(env: any, chatId: number, lotteryId: string) {
     return;
   }
 
-  let msg = `📊 **[${lotteryName}] 近10期开奖**\n\n`;
+  let msg = `📊 <b>[${lotteryName}] 近10期开奖</b>\n\n`;
   results.forEach((row: any) => {
     const nums = JSON.parse(row.numbers).map((n: number) => String(n).padStart(2, '0')).join(',');
     const sp = String(row.special_number).padStart(2, '0');
-    msg += `🔹 **${row.draw_number}期**: ${nums} + [${sp}]\n`;
+    msg += `🔹 <b>${row.draw_number}期</b>: ${nums} + [${sp}]\n`;
   });
 
   await sendMessage(env.TG_BOT_TOKEN, chatId, msg);
 }
 
+// --- Telegram API Helpers ---
+
 async function sendMessage(token: string, chatId: number, text: string, removeKeyboard = false) {
   if(!token) return;
+  
   const body: any = { 
     chat_id: chatId, 
     text: text, 
-    parse_mode: 'Markdown' 
+    parse_mode: 'HTML' // Use HTML for stability
   };
-  if (removeKeyboard) body.reply_markup = { remove_keyboard: true };
-  await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
-  });
+
+  if (removeKeyboard) {
+      body.reply_markup = { remove_keyboard: true };
+  }
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        console.error("Telegram SendMessage Failed:", errorData);
+        
+        // Fallback: Try sending without formatting if it was a parsing error
+        if (errorData.error_code === 400 && errorData.description?.includes('parse')) {
+            body.parse_mode = undefined;
+            body.text += "\n\n(Formatting Error: Showing raw text)";
+            await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+        }
+    }
+  } catch (error) {
+      console.error("Network/Fetch Error in sendMessage:", error);
+  }
 }
 
 async function answerCallbackQuery(token: string, callbackQueryId: string, text: string) {
