@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect } from 'react';
-import { DrawResult, LotteryConfig } from './types';
+import { DrawResult, LotteryConfig, PredictionResult } from './types';
 import { LOTTERY_CONFIGS } from './constants';
 import { fetchLotteryHistory } from './geminiService';
 import { LotteryTabs } from './components/LotteryTabs';
 import { LatestDraw } from './components/LatestDraw';
 import { HistoryList } from './components/HistoryList';
+import { PredictionPanel } from './views/PredictionPanel';
 
-// Add type definition for Telegram WebApp
 declare global {
   interface Window {
     Telegram: {
@@ -23,10 +23,12 @@ declare global {
 
 const App: React.FC = () => {
   const [selectedLottery, setSelectedLottery] = useState<LotteryConfig>(LOTTERY_CONFIGS[0]);
+  
   const [history, setHistory] = useState<DrawResult[]>([]);
+  const [prediction, setPrediction] = useState<PredictionResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Initialize Telegram Web App
   useEffect(() => {
     if (window.Telegram?.WebApp) {
       window.Telegram.WebApp.ready();
@@ -34,41 +36,45 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // Fetch data automatically when lottery changes
-  useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      setHistory([]); // Clear previous history while loading
-      try {
-        const result = await fetchLotteryHistory(selectedLottery);
-        setHistory(result.history);
-      } catch (err: any) {
-        console.error(err);
-        // Silent fail or minimal UI indication could be added here
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const loadData = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await fetchLotteryHistory(selectedLottery);
+      setHistory(result.history);
+      setPrediction(result.prediction);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "加载失败");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     loadData();
   }, [selectedLottery]);
 
   return (
-    <div className="min-h-screen bg-[#0f172a]">
-      {/* 1. Navigation Bar */}
+    <div className="min-h-screen bg-[#0f172a] text-slate-100 font-sans selection:bg-amber-500/30 pb-10">
       <LotteryTabs 
         configs={LOTTERY_CONFIGS}
         selected={selectedLottery}
         onSelect={setSelectedLottery}
       />
 
-      {/* 2. Latest Draw Record */}
-      <LatestDraw 
-        draw={history.length > 0 ? history[0] : null} 
-        isLoading={isLoading} 
-      />
+      <LatestDraw draw={history[0]} isLoading={isLoading} />
+      
+      <div className="px-4 mt-6">
+        <PredictionPanel 
+          prediction={prediction}
+          isLoading={isLoading}
+          error={error}
+          onPredict={loadData}
+          lotteryName={selectedLottery.name}
+        />
+      </div>
 
-      {/* 3. Draw History List */}
       <HistoryList history={history} />
     </div>
   );

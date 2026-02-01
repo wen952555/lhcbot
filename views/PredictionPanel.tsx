@@ -1,8 +1,9 @@
 
 import React from 'react';
-import { Sparkles, RefreshCcw, Info, AlertCircle } from 'lucide-react';
+import { RefreshCcw, AlertCircle, Crown, Layers, Hash, Palette } from 'lucide-react';
 import { PredictionResult } from '../types';
 import Ball from '../components/Ball';
+import { COLOR_NAMES } from '../constants';
 
 interface PredictionPanelProps {
   prediction: PredictionResult | null;
@@ -13,99 +14,128 @@ interface PredictionPanelProps {
 }
 
 export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, isLoading, error, onPredict, lotteryName }) => {
+  
+  if (isLoading) {
+    return (
+      <div className="py-20 flex flex-col items-center gap-4 glass-panel rounded-3xl mx-4">
+        <div className="w-10 h-10 border-2 border-slate-700 border-t-amber-500 rounded-full animate-spin"></div>
+        <p className="text-slate-500 text-xs">正在获取最新推荐...</p>
+      </div>
+    );
+  }
+
+  if (!prediction) {
+    return (
+      <div className="glass-panel rounded-3xl p-8 mx-4 text-center">
+        <div className="w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4">
+           <AlertCircle className="text-slate-500 w-6 h-6" />
+        </div>
+        <h3 className="text-slate-300 font-bold mb-2">暂无推荐数据</h3>
+        <p className="text-slate-500 text-xs mb-6">管理员暂未发布本期 {lotteryName} 的心水推荐。</p>
+        <button onClick={onPredict} className="text-xs text-amber-500 underline">刷新试试</button>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <section className="glass-panel rounded-3xl p-8 text-center">
-        <div className="flex items-center justify-between mb-6">
-          <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest bg-amber-500/10 px-3 py-1 rounded-full">
-            当前：{lotteryName}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between px-2">
+         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-800/50 px-2 py-1 rounded">
+            {lotteryName} 专家推荐
           </span>
-          {prediction && (
-             <span className="text-[10px] text-slate-500 flex items-center gap-1">
-               <RefreshCcw className="w-3 h-3 animate-reverse-spin" /> 数据已同步 2025 属性映射
+          {prediction.timestamp && (
+             <span className="text-[10px] text-slate-600">
+               {new Date(prediction.timestamp).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})} 更新
              </span>
           )}
+      </div>
+
+      {/* 1. 推荐六肖 */}
+      <section className="glass-panel rounded-2xl p-4 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-3 opacity-5">
+            <Crown className="w-16 h-16" />
         </div>
-        
-        <h2 className="text-2xl font-bold mb-6 flex items-center justify-center gap-2">
-          <Sparkles className="text-amber-400" /> AI 深度预测
-        </h2>
-        
-        {!prediction && !isLoading && (
-          <div className="py-10">
-            <p className="text-slate-400 mb-8 max-w-md mx-auto">
-              系统将抓取最新历史开奖，结合 2025 年生肖及波色分布，通过神经网络计算最理想组合。
-            </p>
-            <button 
-              onClick={onPredict}
-              className="px-10 py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold rounded-2xl transition-all shadow-xl shadow-amber-600/20 active:scale-95"
-            >
-              开始智能分析
-            </button>
-          </div>
-        )}
-
-        {isLoading && (
-          <div className="py-20 flex flex-col items-center gap-4">
-            <div className="w-16 h-16 border-4 border-amber-500/20 border-t-amber-500 rounded-full animate-spin"></div>
-            <p className="text-amber-400 font-medium animate-pulse text-sm">正在深度分析生肖走势与波色热度...</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="py-6 px-4 bg-red-500/10 border border-red-500/20 rounded-2xl mb-6">
-            <p className="text-red-400 text-sm">{error}</p>
-            <button onClick={onPredict} className="text-xs underline mt-2 text-red-300">重试</button>
-          </div>
-        )}
-
-        {prediction && !isLoading && (
-          <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-wrap justify-center gap-x-6 gap-y-8">
-              {prediction.numbers.map((num, idx) => (
-                <Ball key={idx} number={num} size="lg" />
-              ))}
-              <div className="flex items-center px-1 text-slate-500 font-bold self-start mt-4">+</div>
-              <Ball number={prediction.specialNumber} size="lg" isSpecial />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-              <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700">
-                <h3 className="text-amber-400 font-semibold mb-3 flex items-center gap-2">
-                  <Info className="w-4 h-4" /> 深度分析建议
-                </h3>
-                <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
-                  {prediction.reasoning}
-                </p>
-              </div>
-              <div className="bg-slate-800/50 p-6 rounded-2xl border border-slate-700 flex flex-col justify-center">
-                <div className="flex justify-between items-end mb-2">
-                  <h3 className="text-amber-400 font-semibold">AI 信心模型</h3>
-                  <span className="text-2xl font-bold text-white">{prediction.confidence}%</span>
+        <h3 className="text-amber-500 text-xs font-bold mb-3 flex items-center gap-2">
+            <Crown className="w-4 h-4" /> 必中六肖
+        </h3>
+        <div className="flex justify-between px-2">
+            {prediction.zodiacs.map((z, i) => (
+                <div key={i} className="flex flex-col items-center gap-1">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-b from-amber-500 to-amber-700 shadow-lg shadow-amber-900/50 flex items-center justify-center text-white font-bold text-lg border border-amber-400/30">
+                        {z}
+                    </div>
                 </div>
-                <div className="w-full bg-slate-700 rounded-full h-3">
-                  <div 
-                    className="bg-amber-500 h-3 rounded-full transition-all duration-1000 shadow-[0_0_10px_rgba(245,158,11,0.5)]" 
-                    style={{ width: `${prediction.confidence}%` }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-
-            <button 
-              onClick={onPredict}
-              className="text-slate-500 hover:text-white transition-colors text-xs underline underline-offset-4"
-            >
-              重新计算数据
-            </button>
-          </div>
-        )}
+            ))}
+        </div>
       </section>
 
-      <div className="bg-amber-500/5 border border-amber-500/10 p-4 rounded-xl flex items-start gap-3">
-        <AlertCircle className="text-amber-500 w-5 h-5 flex-shrink-0 mt-0.5" />
-        <p className="text-[11px] text-slate-400 leading-relaxed">
-          <strong>声明：</strong> 号码生肖及波色映射基于 2025 蛇年标准。本程序仅供数据分析娱乐，彩票结果具备随机性，请勿过度投注。
+      {/* 2. 推荐18码 */}
+      <section className="glass-panel rounded-2xl p-4">
+        <h3 className="text-blue-400 text-xs font-bold mb-3 flex items-center gap-2">
+            <Hash className="w-4 h-4" /> 精选18码
+        </h3>
+        <div className="grid grid-cols-6 gap-2 sm:gap-3">
+            {prediction.numbers_18.map((num, i) => (
+                <div key={i} className="aspect-square rounded-lg bg-slate-800/80 flex items-center justify-center border border-slate-700 text-slate-200 font-mono font-bold text-sm shadow-inner">
+                    {num}
+                </div>
+            ))}
+        </div>
+      </section>
+
+      {/* 3. 头数 / 尾数 / 波色 Grid */}
+      <div className="grid grid-cols-2 gap-3">
+          {/* 头数 */}
+          <div className="glass-panel rounded-2xl p-4">
+             <h3 className="text-slate-400 text-xs font-bold mb-2 flex items-center gap-1">
+                <Layers className="w-3 h-3" /> 推荐头数
+             </h3>
+             <div className="flex flex-wrap gap-2">
+                 {prediction.heads.map((h, i) => (
+                     <span key={i} className="text-sm font-bold bg-slate-700/50 text-slate-200 px-2 py-1 rounded border border-slate-600">
+                        {h}头
+                     </span>
+                 ))}
+             </div>
+          </div>
+
+           {/* 尾数 */}
+           <div className="glass-panel rounded-2xl p-4">
+             <h3 className="text-slate-400 text-xs font-bold mb-2 flex items-center gap-1">
+                <Layers className="w-3 h-3" /> 推荐尾数
+             </h3>
+             <div className="flex flex-wrap gap-2">
+                 {prediction.tails.map((t, i) => (
+                     <span key={i} className="text-sm font-bold bg-slate-700/50 text-slate-200 px-2 py-1 rounded border border-slate-600">
+                        {t}尾
+                     </span>
+                 ))}
+             </div>
+          </div>
+      </div>
+
+       {/* 波色 */}
+      <section className="glass-panel rounded-2xl p-4 flex items-center justify-between">
+           <h3 className="text-slate-400 text-xs font-bold flex items-center gap-2">
+                <Palette className="w-4 h-4" /> 推荐波色
+           </h3>
+           <div className="flex gap-3">
+               {prediction.colors.map((c, i) => (
+                   <div key={i} className={`px-4 py-1.5 rounded-full text-xs font-bold shadow-lg flex items-center gap-2
+                       ${c === 'red' ? 'bg-red-500 text-white shadow-red-900/20' : 
+                         c === 'blue' ? 'bg-blue-500 text-white shadow-blue-900/20' : 
+                         'bg-emerald-500 text-white shadow-emerald-900/20'}`}>
+                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                        {COLOR_NAMES[c as 'red'|'blue'|'green']}波
+                   </div>
+               ))}
+           </div>
+      </section>
+      
+      <div className="p-4 flex items-start gap-3 opacity-50">
+        <AlertCircle className="text-slate-500 w-4 h-4 flex-shrink-0 mt-0.5" />
+        <p className="text-[10px] text-slate-500 leading-relaxed">
+          所有预测数据由后台智能算法生成，仅供娱乐参考，请勿沉迷。
         </p>
       </div>
     </div>

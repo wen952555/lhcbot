@@ -2,7 +2,7 @@
 {
   "name": "mark-six-ai-oracle",
   "version": "1.0.0",
-  "description": "Mark Six Lottery Prediction with Gemini AI",
+  "description": "Mark Six Lottery Prediction with Statistical Analysis",
   "type": "module",
   "scripts": {
     "dev": "vite",

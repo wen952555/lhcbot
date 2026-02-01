@@ -1,7 +1,7 @@
 
-import { DrawResult, LotteryConfig } from "./types";
+import { DrawResult, LotteryConfig, PredictionResult } from "./types";
 
-export const fetchLotteryHistory = async (config: LotteryConfig): Promise<{ history: DrawResult[] }> => {
+export const fetchLotteryHistory = async (config: LotteryConfig): Promise<{ history: DrawResult[], prediction: PredictionResult }> => {
   try {
     const response = await fetch('/api/predict', {
       method: 'POST',

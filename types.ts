@@ -7,10 +7,14 @@ export interface DrawResult {
 }
 
 export interface PredictionResult {
-  numbers: number[];
-  specialNumber: number;
-  reasoning: string;
+  zodiacs: string[];      // 推荐六肖
+  numbers_18: number[];   // 推荐18码
+  heads: number[];        // 推荐3个头数
+  tails: number[];        // 推荐4个尾数
+  colors: string[];       // 推荐两个波色 ('red' | 'blue' | 'green')
+  reasoning: string;      // 简短描述
   confidence: number;
+  timestamp?: number;
 }
 
 export interface NumberFrequency {

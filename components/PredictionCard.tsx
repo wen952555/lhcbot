@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { Sparkles, BrainCircuit } from 'lucide-react';
 import { PredictionResult } from '../types';
@@ -16,7 +15,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, isLo
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-white font-bold flex items-center gap-2">
           <BrainCircuit className="w-5 h-5 text-amber-500" />
-          AI 智能预测
+          智能算法预测
         </h3>
         {!prediction && !isLoading && (
           <button 
@@ -31,23 +30,27 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, isLo
       {isLoading && (
         <div className="py-8 flex flex-col items-center justify-center text-center">
           <div className="w-10 h-10 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mb-3"></div>
-          <p className="text-amber-500/80 text-xs animate-pulse">正在分析生肖波色走势...</p>
+          <p className="text-amber-500/80 text-xs animate-pulse">正在进行数据计算...</p>
         </div>
       )}
 
       {prediction && !isLoading && (
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <div className="flex items-center justify-center gap-2 mb-6 bg-slate-900/40 p-3 rounded-xl">
-            {prediction.numbers.map((num, idx) => (
-              <Ball key={idx} number={num} size="md" />
-            ))}
-            <span className="text-slate-600 mx-1">+</span>
-            <Ball number={prediction.specialNumber} size="md" isSpecial />
+          <div className="flex flex-col items-center gap-2 mb-6 bg-slate-900/40 p-3 rounded-xl">
+            <div className="flex flex-wrap justify-center gap-2">
+              {/* Show first 6 numbers from the 18 recommended numbers as a preview */}
+              {prediction.numbers_18.slice(0, 6).map((num, idx) => (
+                <Ball key={idx} number={num} size="md" />
+              ))}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-1 px-4 text-center">
+              精选18码预览: {prediction.numbers_18.slice(0, 10).join(', ')}...
+            </div>
           </div>
 
           <div className="bg-slate-800/50 p-3 rounded-xl border border-white/5">
             <div className="flex justify-between items-center mb-2">
-              <span className="text-xs text-slate-400">推荐信心</span>
+              <span className="text-xs text-slate-400">算法信心指数</span>
               <span className="text-xs font-bold text-amber-400">{prediction.confidence}%</span>
             </div>
             <div className="w-full bg-slate-700 h-1.5 rounded-full mb-3">
