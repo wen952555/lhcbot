@@ -220,7 +220,8 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
       VALUES (?, ?, ?, ?, ?, ?)
     `);
 
-    const batch = [];
+    const batch: any[] = [];
+    const processedDraws = new Set<string>();
     let firstErrorItem = null;
 
     for (const item of list) {
@@ -253,11 +254,14 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
        const normalNums = nums.length >= 7 ? nums.slice(0, 6) : nums; // 前面的是平码
 
        // 简单的去重/验证逻辑，防止 API 偶尔返回奇怪数据
-       if (batch.find((b: any) => b.drawNumber === String(drawNumber))) continue;
+       const drawNumStr = String(drawNumber);
+       if (processedDraws.has(drawNumStr)) continue;
+       
+       processedDraws.add(drawNumStr);
 
        batch.push(stmt.bind(
          lotteryId, 
-         String(drawNumber), 
+         drawNumStr, 
          openTime, 
          JSON.stringify(normalNums), 
          special, 
