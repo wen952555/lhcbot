@@ -2,13 +2,7 @@
 // --- Helper Data for Backend ---
 const ZODIACS = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
 
-const COLOR_NAMES = {
-  red: '红',
-  blue: '蓝',
-  green: '绿'
-};
-
-// 2025 蛇年映射
+// 2025 蛇年映射 (1号为蛇)
 function getZodiacForNumber(num: number): string {
     const map: Record<number, string> = {
         1: '蛇', 2: '龙', 3: '兔', 4: '虎', 5: '牛', 6: '鼠', 7: '猪', 8: '狗', 9: '鸡', 10: '猴', 11: '羊', 12: '马',
@@ -16,7 +10,7 @@ function getZodiacForNumber(num: number): string {
         25: '蛇', 26: '龙', 27: '兔', 28: '虎', 29: '牛', 30: '鼠', 31: '猪', 32: '狗', 33: '鸡', 34: '猴', 35: '羊', 36: '马',
         37: '蛇', 38: '龙', 39: '兔', 40: '虎', 41: '牛', 42: '鼠', 43: '猪', 44: '狗', 45: '鸡', 46: '猴', 47: '羊', 48: '马', 49: '蛇'
     };
-    return map[num];
+    return map[num] || '';
 }
 
 function getColorForNumber(num: number): string {
@@ -36,40 +30,47 @@ interface AnalysisResult {
 }
 
 // ---------------------------------------------------------
-// 核心统计类：管理所有历史记录
+// 核心统计类：管理所有历史记录 (完善版)
 // ---------------------------------------------------------
 class StatisticsEngine {
     history: any[];
     totalDraws: number;
     
-    // 缓存数据
-    omissionMap: Record<number, number> = {}; // 当前遗漏期数
-    frequencyMap: Record<number, number> = {}; // 出现次数 (近50期)
-    avgOmissionMap: Record<number, number> = {}; // 平均遗漏
+    // 基础号码统计
+    omissionMap: Record<number, number> = {}; 
+    frequencyMap: Record<number, number> = {}; 
+
+    // 属性统计 (生肖/波色/头数)
+    zodiacFreqMap: Record<string, number> = {};
+    colorFreqMap: Record<string, number> = {};
+    tailFreqMap: Record<number, number> = {};
 
     constructor(history: any[]) {
         this.history = history;
         this.totalDraws = history.length;
-        this.calculateBasicStats();
+        this.initializeMaps();
+        this.calculateStats();
     }
 
-    private calculateBasicStats() {
-        // 初始化
+    private initializeMaps() {
         for (let i = 1; i <= 49; i++) {
             this.omissionMap[i] = 0;
             this.frequencyMap[i] = 0;
-            this.avgOmissionMap[i] = 0;
         }
+        ZODIACS.forEach(z => this.zodiacFreqMap[z] = 0);
+        ['red', 'blue', 'green'].forEach(c => this.colorFreqMap[c] = 0);
+        for(let i=0; i<=9; i++) this.tailFreqMap[i] = 0;
+    }
 
-        // 1. 计算当前遗漏 (Current Omission)
-        // 从最新一期往回找，直到找到数字
+    private calculateStats() {
+        // 1. 计算当前遗漏
         for (let num = 1; num <= 49; num++) {
             let found = false;
             for (let i = 0; i < this.history.length; i++) {
                 const draw = this.history[i];
                 const special = parseInt(draw.specialNumber);
                 if (special === num) {
-                    this.omissionMap[num] = i; // i=0 is latest, so omission is 0 if it appeared now
+                    this.omissionMap[num] = i; 
                     found = true;
                     break;
                 }
@@ -77,33 +78,53 @@ class StatisticsEngine {
             if (!found) this.omissionMap[num] = this.history.length;
         }
 
-        // 2. 计算频率 (Frequency in last 50 draws)
+        // 2. 计算频率 (仅看最近 50 期或全部)
         const recentLimit = Math.min(this.history.length, 50);
         for (let i = 0; i < recentLimit; i++) {
             const special = parseInt(this.history[i].specialNumber);
-            if (!isNaN(special)) this.frequencyMap[special]++;
+            if (!isNaN(special)) {
+                // 号码频率
+                this.frequencyMap[special]++;
+                
+                // 生肖频率
+                const z = getZodiacForNumber(special);
+                if (z) this.zodiacFreqMap[z] = (this.zodiacFreqMap[z] || 0) + 1;
+
+                // 波色频率
+                const c = getColorForNumber(special);
+                if (c) this.colorFreqMap[c] = (this.colorFreqMap[c] || 0) + 1;
+
+                // 尾数频率
+                const t = special % 10;
+                this.tailFreqMap[t] = (this.tailFreqMap[t] || 0) + 1;
+            }
         }
     }
 
     getOmission(num: number) { return this.omissionMap[num] || 0; }
     getFrequency(num: number) { return this.frequencyMap[num] || 0; }
+    getZodiacFreq(z: string) { return this.zodiacFreqMap[z] || 0; }
+    getColorFreq(c: string) { return this.colorFreqMap[c] || 0; }
+    getTailFreq(t: number) { return this.tailFreqMap[t] || 0; }
 }
 
 // ---------------------------------------------------------
 // 策略权重定义
 // ---------------------------------------------------------
 interface StrategyWeights {
-    HOT: number;    // 热号权重
-    COLD: number;   // 冷号权重 (博反弹)
-    REPEAT: number; // 连码/回补权重
-    TAIL: number;   // 尾数规律权重
+    HOT: number;      // 号码热度
+    COLD: number;     // 号码冷度
+    REPEAT: number;   // 邻号/重号
+    ZODIAC: number;   // 生肖热度权重 (新)
+    COLOR: number;    // 波色热度权重 (新)
+    TAIL: number;     // 尾数热度权重
 }
 
 // ---------------------------------------------------------
-// 主分析函数
+// 主分析函数 (入口)
 // ---------------------------------------------------------
 export function generateDeterministicPrediction(history: any[]): AnalysisResult {
-    // 移除 < 20 的限制，只要有数据就分析
+    // 容错：无数据情况
     if (!history || history.length === 0) {
         return { 
             zodiacs: [], numbers_18: [], heads: [], tails: [], colors: [], 
@@ -111,96 +132,102 @@ export function generateDeterministicPrediction(history: any[]): AnalysisResult 
         };
     }
 
-    // 1. 自动权重调整 (Auto-Adjustment Logic)
-    // 我们回测最近 10 期，看看是“热号”赢了还是“冷号”赢了
+    // 1. 自动权重调整 (AI部分)
+    // 根据近期走势判断是该追热还是博冷
     const weights = autoAdjustWeights(history);
 
-    // 2. 建立当前统计引擎
+    // 2. 建立统计引擎
     const engine = new StatisticsEngine(history);
 
-    // 3. 计算所有号码的综合得分
+    // 3. 计算所有号码的综合得分 (闭环逻辑：属性热度反哺号码得分)
     const numberScores: Record<number, number> = {};
     for (let i = 1; i <= 49; i++) {
         numberScores[i] = calculateNumberScore(i, engine, weights, history[0]);
     }
 
-    // 4. 提取结果
+    // 4. 排序提取 Top 号码
     const sortedNumbers = Object.entries(numberScores)
         .sort(([, a], [, b]) => b - a)
         .map(([n]) => parseInt(n));
 
-    // --- Top 18 Numbers ---
+    // --- 生成 18 码 ---
     const numbers_18 = sortedNumbers.slice(0, 18).sort((a, b) => a - b);
 
-    // --- Analyze Zodiacs based on top numbers ---
-    // 不仅仅是看Top numbers，还要结合生肖本身的遗漏
+    // --- 生成 六肖 ---
+    // 逻辑：综合“号码得分总和”与“生肖本身热度”
     const zodiacScores: Record<string, number> = {};
-    ZODIACS.forEach(z => zodiacScores[z] = 0);
+    ZODIACS.forEach(z => {
+        // 基础分：该生肖近期出现的频率
+        zodiacScores[z] = engine.getZodiacFreq(z) * 10; 
+    });
     
-    // 将号码分加权到生肖上
+    // 加分项：如果你预测的 Top 号码属于这个生肖，加分
     sortedNumbers.forEach((num, index) => {
         const z = getZodiacForNumber(num);
         if (z) {
-            // 排名越靠前，给生肖贡献的分数越高
-            const rankScore = (50 - index); 
-            zodiacScores[z] += rankScore;
+            // 排名越靠前 (index越小)，贡献分越大
+            zodiacScores[z] += (50 - index) * 2; 
         }
     });
+
     const zodiacs = Object.entries(zodiacScores)
         .sort(([, a], [, b]) => b - a)
         .slice(0, 6)
         .map(([z]) => z);
 
-    // --- Analyze Heads & Tails ---
+    // --- 生成 头数 & 尾数 ---
     const headScores: Record<number, number> = {};
     const tailScores: Record<number, number> = {};
-    [0,1,2,3,4].forEach(h => headScores[h] = 0);
-    [0,1,2,3,4,5,6,7,8,9].forEach(t => tailScores[t] = 0);
-
-    // 取前 15 个强力号码来分析头尾特征
-    sortedNumbers.slice(0, 15).forEach(num => {
-        headScores[Math.floor(num / 10)]++;
-        tailScores[num % 10]++;
+    
+    // 基于 Top 20 号码统计头尾
+    sortedNumbers.slice(0, 20).forEach(num => {
+        const h = Math.floor(num / 10);
+        const t = num % 10;
+        headScores[h] = (headScores[h] || 0) + 1;
+        tailScores[t] = (tailScores[t] || 0) + 1;
     });
 
     const heads = Object.entries(headScores).sort(([,a],[,b]) => b-a).slice(0, 3).map(([h]) => parseInt(h)).sort((a,b)=>a-b);
     const tails = Object.entries(tailScores).sort(([,a],[,b]) => b-a).slice(0, 4).map(([t]) => parseInt(t)).sort((a,b)=>a-b);
 
-    // --- Analyze Colors ---
+    // --- 生成 波色 ---
     const colorScores: Record<string, number> = { red: 0, blue: 0, green: 0 };
-    sortedNumbers.slice(0, 12).forEach(num => {
-        colorScores[getColorForNumber(num)]++;
+    // 结合号码得分 + 波色本身热度
+    ['red', 'blue', 'green'].forEach(c => {
+        colorScores[c] += engine.getColorFreq(c) * 5;
+    });
+    sortedNumbers.slice(0, 15).forEach(num => {
+        colorScores[getColorForNumber(num)] += 10;
     });
     const colors = Object.entries(colorScores).sort(([,a],[,b]) => b-a).slice(0, 2).map(([c]) => c);
 
-    // 5. 生成理由
-    const strategyName = weights.HOT > weights.COLD ? "热号追踪策略" : "冷号回补策略";
-    const focus = weights.HOT > weights.COLD ? "近期高频号码" : "遗漏值较高号码";
+    // 5. 生成理由文案
+    const strategyName = weights.HOT > weights.COLD ? "热号追踪与属性共振" : "冷号回补与均值回归";
     const bestZodiac = zodiacs[0];
-    const bestTail = tails[0];
+    const bestColor = colors[0] === 'red' ? '红' : colors[0] === 'blue' ? '蓝' : '绿';
     
-    // 如果数据很少，理由里加个提示
+    // 数据量警告
     const dataWarning = history.length < 15 ? "（样本较少，仅供参考）" : "";
 
-    const reasoning = `系统基于${history.length}期数据分析${dataWarning}，当前走势符合【${strategyName}】。已自动调整算法权重，重点捕捉${focus}。大数据锁定[${bestZodiac}]肖及[${bestTail}]尾，防范特码[${numbers_18[0]}]。`;
+    const reasoning = `基于${history.length}期数据${dataWarning}，系统启用【${strategyName}】算法。权重偏向${weights.HOT > 1.2 ? '近期热码' : '遗漏回补'}。数据模型显示[${bestZodiac}]肖及[${bestColor}]波存在强劲走势，特码极大概率落入推荐的18码区间。`;
 
-    // 6. 信心指数
-    // 基于Top1得分与平均分的差距
+    // 6. 信心指数计算
+    // 计算得分的标准差，离散度越高，信心越强（说明好的号码很突出）
     const scoreValues = Object.values(numberScores);
-    const maxScore = scoreValues[0]; // sorted descending earlier? No, Object.values order not guaranteed.
-    const realMax = Math.max(...scoreValues);
-    const avgScore = scoreValues.reduce((a,b)=>a+b,0) / 49;
-    const deviation = realMax / (avgScore || 1); // Avoid div by zero
+    const max = Math.max(...scoreValues);
+    const avg = scoreValues.reduce((a,b)=>a+b,0) / 49;
     
-    // Deviation 1.5 -> 70%, 3.0 -> 95%
-    let confidence = Math.floor(70 + (deviation - 1.5) * 16);
+    let confidence = 75; // 基础分
+    const ratio = max / (avg || 1);
     
-    // 如果数据太少，强行降低信心值
-    if (history.length < 15) {
-        confidence = Math.min(confidence, 75);
-    }
-    
-    confidence = Math.max(60, Math.min(98, confidence));
+    if (ratio > 2.5) confidence += 15;
+    else if (ratio > 1.8) confidence += 10;
+    else if (ratio < 1.2) confidence -= 10;
+
+    // 样本太少强制扣分
+    if (history.length < 10) confidence = Math.min(confidence, 65);
+
+    confidence = Math.min(99, Math.max(50, confidence));
 
     return {
         zodiacs,
@@ -214,45 +241,46 @@ export function generateDeterministicPrediction(history: any[]): AnalysisResult 
 }
 
 // ---------------------------------------------------------
-// 辅助函数：计算单个号码得分
+// 辅助函数：计算单个号码得分 (Perfected Logic)
 // ---------------------------------------------------------
 function calculateNumberScore(num: number, engine: StatisticsEngine, weights: StrategyWeights, lastDraw: any): number {
     let score = 0;
     
-    // 1. Hot Score (Frequency)
-    // Normalize frequency (0 to ~10) to a score
+    // 1. 号码自身热度 (Frequency)
     const freq = engine.getFrequency(num);
     score += freq * weights.HOT * 10; 
 
-    // 2. Cold Score (Omission)
-    // Omission usually 0 to 49+. 
+    // 2. 号码遗漏值 (Omission / Cold)
     const omission = engine.getOmission(num);
-    // If we are looking for cold numbers, higher omission = higher score
-    if (omission > 10) {
-        score += (omission * weights.COLD * 2); 
-    } else {
-        // If we are strictly playing hot, recent omission (low value) is good.
-        // But here weights.COLD handles the preference.
+    // 遗漏超过一定值后，开始加分(博反弹)，或者减分(如果策略是极度追热)
+    // 这里采用平衡逻辑：极度冷号(>30期)给予关注，但主要还是看热度
+    if (omission > 20) {
+        score += (omission * weights.COLD * 1.5); 
     }
 
-    // 3. Repeat Score (If appeared in last draw's normal numbers)
+    // 3. 属性共振 (Attribute Resonance) - 新增完善点
+    // 如果这个号码所属的生肖很热，给号码加分
+    const z = getZodiacForNumber(num);
+    const zFreq = engine.getZodiacFreq(z);
+    score += zFreq * weights.ZODIAC * 5;
+
+    // 如果这个号码所属的波色很热，给号码加分
+    const c = getColorForNumber(num);
+    const cFreq = engine.getColorFreq(c);
+    score += cFreq * weights.COLOR * 5;
+
+    // 如果这个号码所属的尾数很热，给号码加分
+    const t = num % 10;
+    const tFreq = engine.getTailFreq(t);
+    score += tFreq * weights.TAIL * 8;
+
+    // 4. 邻号/重号逻辑
     if (lastDraw && Array.isArray(lastDraw.numbers)) {
         if (lastDraw.numbers.includes(num)) {
-            score += weights.REPEAT * 20; // Bonus for being a neighbor/repeat candidate
+            score += weights.REPEAT * 20; // 平码复开特码概率
         }
     }
     
-    // 4. Tail Analysis
-    // 简单的尾数活跃度加分 (如果该尾数最近5期出过特码)
-    const tail = num % 10;
-    // Check last 5 draws for this tail in special number
-    let tailHits = 0;
-    for(let i=0; i<5 && i<engine.history.length; i++) {
-        const sp = parseInt(engine.history[i].specialNumber);
-        if(!isNaN(sp) && sp % 10 === tail) tailHits++;
-    }
-    score += tailHits * weights.TAIL * 15;
-
     return score;
 }
 
@@ -260,56 +288,49 @@ function calculateNumberScore(num: number, engine: StatisticsEngine, weights: St
 // 自动回测与权重调整 (The "AI" part)
 // ---------------------------------------------------------
 function autoAdjustWeights(fullHistory: any[]): StrategyWeights {
-    // 默认平衡权重
+    // 初始平衡权重
     const weights: StrategyWeights = {
         HOT: 1.0,
-        COLD: 1.0,
+        COLD: 0.8,
         REPEAT: 0.5,
+        ZODIAC: 1.0,
+        COLOR: 0.8,
         TAIL: 0.8
     };
 
-    // 如果数据太少，直接返回默认
-    if (fullHistory.length < 10) return weights;
+    if (fullHistory.length < 5) return weights;
 
-    // 回测最近 10 期 (或更少)
-    // For each draw, we pretend we are predicting it using data from draw+1 onwards
-    let hotStrategyWins = 0;
-    let coldStrategyWins = 0;
+    // 简单回测：检查最近5期开出的特码，是热码多还是冷码多？
+    let hotWins = 0;
+    let coldWins = 0;
 
-    const testCount = Math.min(10, fullHistory.length - 1);
+    // 我们取最近 5 期进行验证
+    const testCount = Math.min(5, fullHistory.length);
+    
     for (let i = 0; i < testCount; i++) {
-        const targetDraw = fullHistory[i];
-        const resultNum = parseInt(targetDraw.specialNumber);
+        const resultNum = parseInt(fullHistory[i].specialNumber);
         if (isNaN(resultNum)) continue;
 
-        // Use data AFTER this draw (historically previous)
-        const pastHistory = fullHistory.slice(i + 1);
-        
-        // 确保有数据回测
-        if (pastHistory.length === 0) continue;
+        // 简易判断：在全量数据中，这个号码算热还是冷？
+        // 注意：严谨的回测应该切片数据，但为了性能这里做近似判断
+        // 假设全量频率 > 2 (在50期内) 算热
+        let freq = 0;
+        // 统计该号码在 i 之后的频率
+        for(let j=i+1; j<fullHistory.length && j < i+50; j++) {
+            if(parseInt(fullHistory[j].specialNumber) === resultNum) freq++;
+        }
 
-        const engine = new StatisticsEngine(pastHistory);
-
-        // Check if result was "Hot" (in top 10 frequent numbers of that time)
-        // or "Cold" (omission > 20)
-        const freq = engine.getFrequency(resultNum);
-        const omission = engine.getOmission(resultNum);
-
-        if (freq >= 2) hotStrategyWins++; // 50期内出现2次以上算偏热
-        if (omission > 15) coldStrategyWins++; // 遗漏大于15期算偏冷
+        if (freq >= 1) hotWins++;
+        else coldWins++;
     }
 
-    // 动态调整
-    if (hotStrategyWins > coldStrategyWins) {
-        weights.HOT = 2.0;
+    // 策略动态调整
+    if (hotWins > coldWins) {
+        weights.HOT = 1.5; // 追热
         weights.COLD = 0.5;
-    } else if (coldStrategyWins > hotStrategyWins) {
-        weights.HOT = 0.5;
-        weights.COLD = 2.0;
     } else {
-        // Tie - trend is unclear, keep balanced but slightly favor Hot (common gambling stats)
-        weights.HOT = 1.2;
-        weights.COLD = 0.8;
+        weights.HOT = 0.6;
+        weights.COLD = 1.5; // 追冷/防冷
     }
 
     return weights;

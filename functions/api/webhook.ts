@@ -14,7 +14,7 @@ export async function onRequestPost(context: any) {
   try {
     const payload = await request.json();
     
-    // 不再处理 callback_query (内联按钮已移除)
+    // 不再处理 callback_query
     if (payload.callback_query) {
         return new Response('OK');
     }
@@ -36,7 +36,7 @@ async function handleMessage(message: any, env: any) {
   const text = message.text?.trim();
   const userId = message.from?.id;
 
-  // 简单的权限检查
+  // 权限检查
   const adminId = env.TG_ADMIN_ID ? parseInt(env.TG_ADMIN_ID) : null;
   const isAdmin = adminId && userId === adminId;
 
@@ -44,6 +44,7 @@ async function handleMessage(message: any, env: any) {
   switch (text) {
       case '/start':
       case '/help':
+      case '帮助':
           await sendHelpMessage(env.TG_BOT_TOKEN, chatId);
           break;
           
@@ -76,8 +77,7 @@ async function handleMessage(message: any, env: any) {
           break;
       
       default:
-          // 不回复默认消息，或者回复帮助信息
-          // await sendHelpMessage(env.TG_BOT_TOKEN, chatId);
+          // 默认不响应无关文本
           break;
   }
 
@@ -88,14 +88,14 @@ async function handleMessage(message: any, env: any) {
 
 async function sendHelpMessage(token: string, chatId: number) {
   const msg = "🤖 <b>六合大数据助手</b>\n\n" +
-              "请直接发送以下文本命令：\n\n" +
-              "🔮 <b>一键预测</b> - 获取所有彩种预测结果\n" +
-              "📊 <b>一键查看记录</b> - 获取所有彩种历史记录\n\n" +
+              "请发送以下文本命令：\n\n" +
+              "🔮 <b>一键预测</b> - 获取所有彩种预测\n" +
+              "📊 <b>一键查看记录</b> - 获取所有彩种记录\n\n" +
               "⚙️ <b>管理员命令：</b>\n" +
               "🔄 <b>一键同步</b> - 同步最新数据\n" +
               "📢 <b>推送频道</b> - 推送预测到频道";
 
-  // 发送消息并移除键盘 (remove_keyboard)
+  // 尝试移除可能存在的旧键盘
   await sendMessage(token, chatId, msg, {
       reply_markup: { remove_keyboard: true }
   });
@@ -105,14 +105,14 @@ async function sendHelpMessage(token: string, chatId: number) {
 
 // 1. 批量预测 (直接发给 Bot 用户，连续3条)
 async function doBatchPredictInBot(env: any, chatId: number) {
-    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在生成预测，请稍候...");
+    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在分析历史数据生成预测...");
 
     for (const lottery of LOTTERIES) {
         try {
             const { message } = await generatePredictionMessage(env, lottery.id);
             await sendMessage(env.TG_BOT_TOKEN, chatId, message);
             // 延迟防止消息乱序
-            await new Promise(r => setTimeout(r, 1000)); 
+            await new Promise(r => setTimeout(r, 1200)); 
         } catch (e: any) {
             await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ <b>[${lottery.name}]</b> 预测失败: ${e.message}`);
         }
@@ -121,7 +121,7 @@ async function doBatchPredictInBot(env: any, chatId: number) {
 
 // 2. 批量查看记录 (直接发给 Bot 用户，连续3条)
 async function doBatchViewInBot(env: any, chatId: number) {
-    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在获取历史记录...");
+    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在获取最近10期开奖记录...");
 
     if (!env.DB) {
         await sendMessage(env.TG_BOT_TOKEN, chatId, "❌ 数据库未连接");
@@ -207,7 +207,7 @@ async function doPushAllToChannel(env: any, adminChatId: number) {
 
 async function syncLotteryData(env: any, lottery: any): Promise<number> {
     const apiUrl = env[lottery.envKey];
-    if (!apiUrl) throw new Error(`Env Var Missing: ${lottery.envKey}`);
+    if (!apiUrl) throw new Error(`环境变量缺失: ${lottery.envKey}`);
 
     const resp = await fetch(apiUrl, { 
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } 
@@ -286,21 +286,27 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
 
     if (historyData.length === 0) throw new Error("暂无历史数据，请先同步");
 
-    // Calculate next draw number
+    // 计算下一期期号
     let nextDrawNumber = "Unknown";
     try {
         const lastDraw = historyData[0].drawNumber;
-        const nextVal = BigInt(lastDraw) + 1n;
-        nextDrawNumber = nextVal.toString();
+        // 尝试解析纯数字期号进行+1，否则加后缀
+        const numVal = parseInt(lastDraw);
+        if (!isNaN(numVal) && String(numVal) === String(lastDraw)) {
+             nextDrawNumber = String(BigInt(lastDraw) + 1n);
+        } else {
+             nextDrawNumber = `${lastDraw}下期`;
+        }
     } catch {
         nextDrawNumber = `${historyData[0].drawNumber}_Next`;
     }
 
+    // 调用完善后的算法
     const prediction = generateDeterministicPrediction(historyData);
     const jsonPrediction = JSON.stringify(prediction);
     const now = Date.now();
 
-    // Save to DB
+    // 存入数据库
     await env.DB.prepare(`
         INSERT OR REPLACE INTO admin_predictions (lottery_id, data, updated_at)
         VALUES (?, ?, ?)
@@ -311,6 +317,7 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
         VALUES (?, ?, ?, ?)
     `).bind(lotteryId, nextDrawNumber, jsonPrediction, now).run();
 
+    // 格式化消息
     const msg = `✅ <b>[${lotteryName}] 第 ${nextDrawNumber} 期 预测</b>\n` +
                 `------------------------------\n` +
                 `🐯 <b>六肖</b>: ${prediction.zodiacs.join(' ')}\n` +
