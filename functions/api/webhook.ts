@@ -14,10 +14,10 @@ export async function onRequestPost(context: any) {
   try {
     const payload = await request.json();
     
-    // 处理内联按钮点击 (选择具体彩种)
+    // 移除 callback_query 处理，因为不再使用内联键盘
     if (payload.callback_query) {
-      await handleCallback(payload.callback_query, env);
-      return new Response('OK');
+        await answerCallbackQuery(env.TG_BOT_TOKEN, payload.callback_query.id, "此菜单已过期");
+        return new Response('OK');
     }
 
     // 处理普通消息 (主菜单)
@@ -37,9 +37,10 @@ async function handleMessage(message: any, env: any) {
   const text = message.text?.trim();
   const userId = message.from?.id;
 
-  // 简单的权限检查
+  // 简单的权限检查 (如需限制非管理员使用某些功能)
   const adminId = env.TG_ADMIN_ID ? parseInt(env.TG_ADMIN_ID) : null;
-  
+  const isAdmin = adminId && userId === adminId;
+
   // 命令路由
   switch (text) {
       case '/start':
@@ -47,24 +48,26 @@ async function handleMessage(message: any, env: any) {
           await sendMainMenu(env.TG_BOT_TOKEN, chatId);
           break;
       case '🔄 一键同步所有':
-          if (adminId && userId !== adminId) {
+          if (!isAdmin) {
              await sendMessage(env.TG_BOT_TOKEN, chatId, "⛔ 只有管理员可以使用同步功能");
              return;
           }
           await doSyncAll(env, chatId);
           break;
-      case '📢 提示全部预测到频道':
-          if (adminId && userId !== adminId) {
+      case '🔮 一键预测':
+          // 连续发送3个彩种的预测结果到当前Bot聊天窗口
+          await doBatchPredictInBot(env, chatId);
+          break;
+      case '📊 一键查看记录':
+          // 连续发送3个彩种的历史记录到当前Bot聊天窗口
+          await doBatchViewInBot(env, chatId);
+          break;
+      case '📢 推送频道':
+          if (!isAdmin) {
              await sendMessage(env.TG_BOT_TOKEN, chatId, "⛔ 只有管理员可以使用推送功能");
              return;
           }
           await doPushAllToChannel(env, chatId);
-          break;
-      case '🔮 获取单个预测':
-          await sendLotterySelector(env.TG_BOT_TOKEN, chatId, 'predict');
-          break;
-      case '📊 查看单个记录':
-          await sendLotterySelector(env.TG_BOT_TOKEN, chatId, 'view');
           break;
       default:
           // 如果是未知文本，默认显示菜单
@@ -74,27 +77,13 @@ async function handleMessage(message: any, env: any) {
   return new Response('OK');
 }
 
-async function handleCallback(callbackQuery: any, env: any) {
-    const chatId = callbackQuery.message.chat.id;
-    const data = callbackQuery.data; // e.g., "predict:new_macau"
-    const [action, lotteryId] = data.split(':');
-
-    // 响应 Telegram Loading 状态
-    await answerCallbackQuery(env.TG_BOT_TOKEN, callbackQuery.id, "正在处理...");
-
-    if (action === 'predict') {
-        await doPredictSingle(env, chatId, lotteryId);
-    } else if (action === 'view') {
-        await doViewRecords(env, chatId, lotteryId);
-    }
-}
-
 // --- Menu Functions ---
 
 async function sendMainMenu(token: string, chatId: number) {
+  // 简单明了的文本命令键盘
   const keyboard = [
-    [{ text: '🔄 一键同步所有' }, { text: '📢 提示全部预测到频道' }],
-    [{ text: '🔮 获取单个预测' }, { text: '📊 查看单个记录' }]
+    [{ text: '🔮 一键预测' }, { text: '📊 一键查看记录' }],
+    [{ text: '🔄 一键同步所有' }, { text: '📢 推送频道' }]
   ];
 
   await sendMessage(token, chatId, "🤖 <b>六合大数据助手</b>\n请选择操作：", {
@@ -104,20 +93,6 @@ async function sendMainMenu(token: string, chatId: number) {
       one_time_keyboard: false
     }
   });
-}
-
-async function sendLotterySelector(token: string, chatId: number, actionType: 'predict' | 'view') {
-    const inlineKeyboard = LOTTERIES.map(l => ([
-        { text: l.name, callback_data: `${actionType}:${l.id}` }
-    ]));
-
-    const text = actionType === 'predict' ? "🔮 请选择要预测的彩种：" : "📊 请选择要查看的彩种：";
-    
-    await sendMessage(token, chatId, text, {
-        reply_markup: {
-            inline_keyboard: inlineKeyboard
-        }
-    });
 }
 
 // --- Logic Functions ---
@@ -140,7 +115,62 @@ async function doSyncAll(env: any, chatId: number) {
     await sendMessage(env.TG_BOT_TOKEN, chatId, report);
 }
 
-// 2. 推送全部到频道
+// 2. 批量预测 (直接发给 Bot 用户)
+async function doBatchPredictInBot(env: any, chatId: number) {
+    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在生成所有彩种预测...");
+
+    for (const lottery of LOTTERIES) {
+        try {
+            const { message } = await generatePredictionMessage(env, lottery.id);
+            await sendMessage(env.TG_BOT_TOKEN, chatId, message);
+            // 稍微延迟一下，保证消息顺序且不触发频率限制
+            await new Promise(r => setTimeout(r, 800)); 
+        } catch (e: any) {
+            await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ [${lottery.name}] 预测生成失败: ${e.message}`);
+        }
+    }
+}
+
+// 3. 批量查看记录 (直接发给 Bot 用户)
+async function doBatchViewInBot(env: any, chatId: number) {
+    await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在获取所有彩种记录...");
+
+    if (!env.DB) {
+        await sendMessage(env.TG_BOT_TOKEN, chatId, "❌ 数据库未连接");
+        return;
+    }
+
+    for (const lottery of LOTTERIES) {
+        try {
+            const { results } = await env.DB.prepare(`
+                SELECT * FROM lottery_draws 
+                WHERE lottery_id = ? 
+                ORDER BY draw_number DESC 
+                LIMIT 10
+            `).bind(lottery.id).all();
+
+            if (!results || results.length === 0) {
+                await sendMessage(env.TG_BOT_TOKEN, chatId, `📭 [${lottery.name}] 暂无记录，请先同步。`);
+                continue;
+            }
+
+            let msg = `📊 <b>[${lottery.name}] 近10期开奖</b>\n\n`;
+            results.forEach((row: any) => {
+                const nums = JSON.parse(row.numbers).map((n: number) => String(n).padStart(2, '0')).join(',');
+                const sp = String(row.special_number).padStart(2, '0');
+                msg += `🔹 <b>${row.draw_number}期</b>: ${nums} + [${sp}]\n`;
+            });
+
+            await sendMessage(env.TG_BOT_TOKEN, chatId, msg);
+            await new Promise(r => setTimeout(r, 800)); // 延迟防止乱序
+
+        } catch (e: any) {
+            await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ [${lottery.name}] 查询失败: ${e.message}`);
+        }
+    }
+}
+
+// 4. 推送全部到频道 (管理员功能)
 async function doPushAllToChannel(env: any, adminChatId: number) {
     const channelId = env.TG_CHANNEL_ID;
     if (!channelId) {
@@ -148,7 +178,7 @@ async function doPushAllToChannel(env: any, adminChatId: number) {
         return;
     }
 
-    await sendMessage(env.TG_BOT_TOKEN, adminChatId, "⏳ 正在生成全网预测并推送到频道...");
+    await sendMessage(env.TG_BOT_TOKEN, adminChatId, "⏳ 正在推送到频道...");
 
     let successCount = 0;
     
@@ -157,58 +187,15 @@ async function doPushAllToChannel(env: any, adminChatId: number) {
             const { message } = await generatePredictionMessage(env, lottery.id);
             await sendMessage(env.TG_BOT_TOKEN, channelId, message);
             successCount++;
-            // 避免触发 Telegram 频率限制
-            await new Promise(r => setTimeout(r, 1500)); 
+            await new Promise(r => setTimeout(r, 2000)); // 推送频道间隔稍微长一点
         } catch (e: any) {
             console.error(`Push failed for ${lottery.name}`, e);
             await sendMessage(env.TG_BOT_TOKEN, adminChatId, `⚠️ [${lottery.name}] 推送失败: ${e.message}`);
         }
     }
 
-    await sendMessage(env.TG_BOT_TOKEN, adminChatId, `✅ 推送完成。成功发送 ${successCount}/${LOTTERIES.length} 个彩种到频道。`);
+    await sendMessage(env.TG_BOT_TOKEN, adminChatId, `✅ 推送完成 (${successCount}/${LOTTERIES.length})`);
 }
-
-// 3. 单个预测 (User)
-async function doPredictSingle(env: any, chatId: number, lotteryId: string) {
-    try {
-        const { message } = await generatePredictionMessage(env, lotteryId);
-        await sendMessage(env.TG_BOT_TOKEN, chatId, message);
-    } catch (e: any) {
-        await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ 预测失败: ${e.message}`);
-    }
-}
-
-// 4. 查看记录
-async function doViewRecords(env: any, chatId: number, lotteryId: string) {
-  const lotteryName = LOTTERIES.find(l => l.id === lotteryId)?.name || lotteryId;
-
-  if (!env.DB) {
-     await sendMessage(env.TG_BOT_TOKEN, chatId, "❌ 数据库未连接");
-     return;
-  }
-
-  const { results } = await env.DB.prepare(`
-    SELECT * FROM lottery_draws 
-    WHERE lottery_id = ? 
-    ORDER BY draw_number DESC 
-    LIMIT 10
-  `).bind(lotteryId).all();
-
-  if (!results || results.length === 0) {
-    await sendMessage(env.TG_BOT_TOKEN, chatId, `📭 [${lotteryName}] 暂无记录，请先执行同步。`);
-    return;
-  }
-
-  let msg = `📊 <b>[${lotteryName}] 近10期开奖</b>\n\n`;
-  results.forEach((row: any) => {
-    const nums = JSON.parse(row.numbers).map((n: number) => String(n).padStart(2, '0')).join(',');
-    const sp = String(row.special_number).padStart(2, '0');
-    msg += `🔹 <b>${row.draw_number}期</b>: ${nums} + [${sp}]\n`;
-  });
-
-  await sendMessage(env.TG_BOT_TOKEN, chatId, msg);
-}
-
 
 // --- Core Helpers ---
 
@@ -291,7 +278,7 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
         specialNumber: row.special_number
     }));
 
-    if (historyData.length < 20) throw new Error("历史数据不足，请先同步");
+    if (historyData.length === 0) throw new Error("暂无历史数据，请先同步");
 
     // Calculate next draw number
     let nextDrawNumber = "Unknown";

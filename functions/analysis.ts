@@ -103,10 +103,11 @@ interface StrategyWeights {
 // 主分析函数
 // ---------------------------------------------------------
 export function generateDeterministicPrediction(history: any[]): AnalysisResult {
-    if (!history || history.length < 20) {
+    // 移除 < 20 的限制，只要有数据就分析
+    if (!history || history.length === 0) {
         return { 
             zodiacs: [], numbers_18: [], heads: [], tails: [], colors: [], 
-            reasoning: "历史数据不足", confidence: 0 
+            reasoning: "暂无历史数据，无法分析", confidence: 0 
         };
     }
 
@@ -177,8 +178,11 @@ export function generateDeterministicPrediction(history: any[]): AnalysisResult 
     const focus = weights.HOT > weights.COLD ? "近期高频号码" : "遗漏值较高号码";
     const bestZodiac = zodiacs[0];
     const bestTail = tails[0];
+    
+    // 如果数据很少，理由里加个提示
+    const dataWarning = history.length < 15 ? "（样本较少，仅供参考）" : "";
 
-    const reasoning = `系统自动回测近10期数据，当前走势符合【${strategyName}】。已自动调整算法权重，重点捕捉${focus}。大数据锁定[${bestZodiac}]肖及[${bestTail}]尾，防范特码[${numbers_18[0]}]。`;
+    const reasoning = `系统基于${history.length}期数据分析${dataWarning}，当前走势符合【${strategyName}】。已自动调整算法权重，重点捕捉${focus}。大数据锁定[${bestZodiac}]肖及[${bestTail}]尾，防范特码[${numbers_18[0]}]。`;
 
     // 6. 信心指数
     // 基于Top1得分与平均分的差距
@@ -186,11 +190,17 @@ export function generateDeterministicPrediction(history: any[]): AnalysisResult 
     const maxScore = scoreValues[0]; // sorted descending earlier? No, Object.values order not guaranteed.
     const realMax = Math.max(...scoreValues);
     const avgScore = scoreValues.reduce((a,b)=>a+b,0) / 49;
-    const deviation = realMax / avgScore;
+    const deviation = realMax / (avgScore || 1); // Avoid div by zero
     
     // Deviation 1.5 -> 70%, 3.0 -> 95%
     let confidence = Math.floor(70 + (deviation - 1.5) * 16);
-    confidence = Math.max(65, Math.min(98, confidence));
+    
+    // 如果数据太少，强行降低信心值
+    if (history.length < 15) {
+        confidence = Math.min(confidence, 75);
+    }
+    
+    confidence = Math.max(60, Math.min(98, confidence));
 
     return {
         zodiacs,
@@ -259,14 +269,14 @@ function autoAdjustWeights(fullHistory: any[]): StrategyWeights {
     };
 
     // 如果数据太少，直接返回默认
-    if (fullHistory.length < 15) return weights;
+    if (fullHistory.length < 10) return weights;
 
-    // 回测最近 10 期 (Test draws 0 to 9)
+    // 回测最近 10 期 (或更少)
     // For each draw, we pretend we are predicting it using data from draw+1 onwards
     let hotStrategyWins = 0;
     let coldStrategyWins = 0;
 
-    const testCount = 10;
+    const testCount = Math.min(10, fullHistory.length - 1);
     for (let i = 0; i < testCount; i++) {
         const targetDraw = fullHistory[i];
         const resultNum = parseInt(targetDraw.specialNumber);
@@ -274,6 +284,10 @@ function autoAdjustWeights(fullHistory: any[]): StrategyWeights {
 
         // Use data AFTER this draw (historically previous)
         const pastHistory = fullHistory.slice(i + 1);
+        
+        // 确保有数据回测
+        if (pastHistory.length === 0) continue;
+
         const engine = new StatisticsEngine(pastHistory);
 
         // Check if result was "Hot" (in top 10 frequent numbers of that time)
