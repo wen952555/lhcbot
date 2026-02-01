@@ -9,8 +9,8 @@ export interface DrawResult {
 export interface PredictionResult {
   numbers: number[];
   specialNumber: number;
-  confidence: number;
   reasoning: string;
+  confidence: number;
 }
 
 export interface NumberFrequency {

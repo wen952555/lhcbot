@@ -3,19 +3,19 @@ import { LotteryConfig } from './types';
 
 export const LOTTERY_CONFIGS: LotteryConfig[] = [
   { 
-    id: 'macau_jc', 
-    name: '澳门六合彩', 
-    apiUrl: 'https://api.example.com/lottery/macau' 
-  },
-  { 
     id: 'new_macau', 
-    name: '新澳门六合彩', 
+    name: '新澳门六合', 
     apiUrl: 'https://api.example.com/lottery/new' 
   },
   { 
+    id: 'hk_jc', 
+    name: '香港六合彩', 
+    apiUrl: 'https://api.example.com/lottery/hk' 
+  },
+  { 
     id: 'old_macau', 
-    name: '老六合彩', 
-    apiUrl: 'https://api.example.com/lottery/old' 
+    name: '老澳门六合', 
+    apiUrl: 'https://api.example.com/lottery/macau' 
   }
 ];
 
@@ -86,9 +86,9 @@ export const COLORS = {
 };
 
 export const COLOR_NAMES = {
-  red: '红波',
-  blue: '蓝波',
-  green: '绿波'
+  red: '红',
+  blue: '蓝',
+  green: '绿'
 };
 
 export const getNumberColor = (num: number): string => {
