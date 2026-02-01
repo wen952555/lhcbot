@@ -19,7 +19,7 @@ export async function onRequest(context: any) {
       )
     `).run();
 
-    // 2. 管理员预测存储表 (Bot 生成结果存这里)
+    // 2. 管理员预测存储表 (当前最新)
     await env.DB.prepare(`
       CREATE TABLE IF NOT EXISTS admin_predictions (
         lottery_id TEXT PRIMARY KEY,
@@ -28,7 +28,18 @@ export async function onRequest(context: any) {
       )
     `).run();
 
-    return new Response("数据库初始化成功！表 'lottery_draws' 和 'admin_predictions' 已就绪。", {
+    // 3. 预测历史记录表 (用于战绩回溯)
+    await env.DB.prepare(`
+      CREATE TABLE IF NOT EXISTS prediction_history (
+        lottery_id TEXT NOT NULL,
+        draw_number TEXT NOT NULL,
+        data TEXT NOT NULL,
+        created_at INTEGER,
+        PRIMARY KEY (lottery_id, draw_number)
+      )
+    `).run();
+
+    return new Response("数据库初始化成功！表 'lottery_draws', 'admin_predictions', 'prediction_history' 已就绪。", {
       headers: { "Content-Type": "text/plain; charset=utf-8" }
     });
   } catch (err: any) {

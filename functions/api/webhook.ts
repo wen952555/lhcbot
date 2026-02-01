@@ -24,13 +24,11 @@ export async function onRequestPost(context: any) {
   try {
     const payload = await request.json();
     
-    // 1. 处理 Callback Query (兼容旧版消息按钮，防止报错)
     if (payload.callback_query) {
       await answerCallbackQuery(env.TG_BOT_TOKEN, payload.callback_query.id, "请使用新版键盘菜单");
       return new Response('OK');
     }
 
-    // 2. 处理普通消息 (主要逻辑)
     if (payload.message) {
       return await handleMessage(payload.message, env);
     }
@@ -42,43 +40,35 @@ export async function onRequestPost(context: any) {
   }
 }
 
-// --- 消息处理 ---
 async function handleMessage(message: any, env: any) {
   const chatId = message.chat.id;
   const text = message.text?.trim();
   const userId = message.from?.id;
 
-  // 1. 权限验证
   const adminId = env.TG_ADMIN_ID ? parseInt(env.TG_ADMIN_ID) : null;
   if (adminId && userId !== adminId) {
-     // 如果没有权限，不显示键盘，只提示
      await sendMessage(env.TG_BOT_TOKEN, chatId, "⛔ 权限不足", true); 
      return new Response('Unauthorized');
   }
 
-  // 2. 匹配键盘指令
   if (text && ACTION_MAP[text]) {
     const { action, lotteryId } = ACTION_MAP[text];
     await executeAction(env, chatId, action, lotteryId);
     return new Response('OK');
   }
 
-  // 3. 处理系统命令
   if (text === '/start' || text === '/menu') {
     await sendKeyboardMenu(env.TG_BOT_TOKEN, chatId);
   } else if (text && text.startsWith('/predict')) {
-    // 兼容旧命令 /predict new_macau
     const parts = text.split(' ');
     if (parts[1]) await executeAction(env, chatId, 'predict', parts[1]);
   } else {
-    // 其他文本，默认回复菜单
     await sendKeyboardMenu(env.TG_BOT_TOKEN, chatId);
   }
 
   return new Response('OK');
 }
 
-// --- 统一动作执行入口 ---
 async function executeAction(env: any, chatId: number, action: string, lotteryId: string) {
   try {
     switch (action) {
@@ -100,11 +90,7 @@ async function executeAction(env: any, chatId: number, action: string, lotteryId
   }
 }
 
-// --- 业务逻辑 ---
-
-// 1. 发送键盘菜单 (ReplyKeyboardMarkup)
 async function sendKeyboardMenu(token: string, chatId: number) {
-  // 构建键盘布局：每个彩种一行，包含3个按钮
   const keyboard = LOTTERIES.map(l => [
     { text: `🔮 ${l.name}预测` },
     { text: `🔄 ${l.name}同步` },
@@ -120,19 +106,17 @@ async function sendKeyboardMenu(token: string, chatId: number) {
       parse_mode: 'Markdown',
       reply_markup: {
         keyboard: keyboard,
-        resize_keyboard: true, // 自适应高度，更美观
-        one_time_keyboard: false // 保持键盘显示
+        resize_keyboard: true,
+        one_time_keyboard: false
       }
     })
   });
 }
 
-// 2. 执行预测
 async function doPredict(env: any, chatId: number, lotteryId: string) {
   const lotteryName = LOTTERIES.find(l => l.id === lotteryId)?.name || lotteryId;
   await sendMessage(env.TG_BOT_TOKEN, chatId, `⏳ 正在生成 [${lotteryName}] 预测...`);
 
-  // Fetch History
   let historyData = [];
   if (env.DB) {
     const { results } = await env.DB.prepare(`
@@ -154,20 +138,42 @@ async function doPredict(env: any, chatId: number, lotteryId: string) {
       return;
   }
 
-  const prediction = generateDeterministicPrediction(historyData);
+  // Calculate next draw number (Simple heuristic: current + 1)
+  // This ensures the prediction is associated with the UPCOMING draw.
+  let nextDrawNumber = "Unknown";
+  try {
+      const lastDraw = historyData[0].drawNumber;
+      // Try parsing as BigInt to handle large IDs, then fallback
+      const nextVal = BigInt(lastDraw) + 1n;
+      nextDrawNumber = nextVal.toString();
+  } catch (e) {
+      console.warn("Could not calculate next draw number automatically", e);
+      nextDrawNumber = `${historyData[0].drawNumber}_NEXT`;
+  }
 
-  // Save to DB
+  const prediction = generateDeterministicPrediction(historyData);
+  const jsonPrediction = JSON.stringify(prediction);
+  const now = Date.now();
+
   if (env.DB) {
+      // 1. Save as 'Current' prediction
       await env.DB.prepare(`
         INSERT OR REPLACE INTO admin_predictions (lottery_id, data, updated_at)
         VALUES (?, ?, ?)
-      `).bind(lotteryId, JSON.stringify(prediction), Date.now()).run();
+      `).bind(lotteryId, jsonPrediction, now).run();
+
+      // 2. Save to History (for Win/Loss record)
+      await env.DB.prepare(`
+        INSERT OR REPLACE INTO prediction_history (lottery_id, draw_number, data, created_at)
+        VALUES (?, ?, ?, ?)
+      `).bind(lotteryId, nextDrawNumber, jsonPrediction, now).run();
   }
 
-  const msg = `✅ **[${lotteryName}] 预测更新成功**\n` +
+  // UPDATED: Show ALL 18 numbers (removed .slice)
+  const msg = `✅ **[${lotteryName}] 第 ${nextDrawNumber} 期 预测成功**\n` +
               `------------------------------\n` +
               `🐯 **六肖**: ${prediction.zodiacs.join(' ')}\n` +
-              `🎱 **18码**: ${prediction.numbers_18.slice(0, 10).join(',')}...\n` +
+              `🎱 **18码**: ${prediction.numbers_18.join(',')}\n` +
               `🔢 **头数**: ${prediction.heads.join(', ')}头\n` +
               `🔚 **尾数**: ${prediction.tails.join(', ')}尾\n` +
               `🎨 **波色**: ${prediction.colors.map((c: string) => c==='red'?'红':c==='blue'?'蓝':'绿').join(' ')}\n` +
@@ -176,7 +182,6 @@ async function doPredict(env: any, chatId: number, lotteryId: string) {
   await sendMessage(env.TG_BOT_TOKEN, chatId, msg);
 }
 
-// 3. 执行同步 (增强版)
 async function doSync(env: any, chatId: number, lotteryId: string) {
   const lottery = LOTTERIES.find(l => l.id === lotteryId);
   if (!lottery) return;
@@ -199,16 +204,13 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
     const rawData = await resp.json();
     let list: any[] = [];
 
-    // 智能解析列表结构
     if (Array.isArray(rawData)) {
         list = rawData;
     } else if (rawData && typeof rawData === 'object') {
-        // 尝试常见的字段名
         list = rawData.data || rawData.list || rawData.result?.data || rawData.rows || [];
     }
 
     if (list.length === 0) {
-      // 调试：如果没找到数据，打印一下 Key 帮助排查
       const keys = rawData && typeof rawData === 'object' ? Object.keys(rawData).join(', ') : 'not_object';
       await sendMessage(env.TG_BOT_TOKEN, chatId, `⚠️ 未找到数据列表。\nAPI返回Keys: [${keys}]`);
       return;
@@ -225,11 +227,8 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
     let firstErrorItem = null;
 
     for (const item of list) {
-       // 智能解析字段：期号
        const drawNumber = item.expect || item.issue || item.period || item.qishu || item.drawNumber || item.draw || item.number || item.id;
-       // 智能解析字段：号码
        const codeStr = item.opencode || item.code || item.openCode || item.numbers || item.haoMa || item.data || item.result;
-       // 智能解析字段：时间
        const openTime = item.opentime || item.time || item.openTime || item.dateline || new Date().toISOString();
 
        if (!drawNumber || !codeStr) {
@@ -237,23 +236,19 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
            continue;
        }
 
-       // 解析号码
        let nums: number[] = [];
        if (Array.isArray(codeStr)) {
          nums = codeStr.map(Number);
        } else if (typeof codeStr === 'string') {
-         // 支持 "01,02+03", "01 02 03", "1,2,3" 等格式
          const cleanStr = codeStr.replace(/[+＋|｜]/g, ',').replace(/\s+/g, ',');
          nums = cleanStr.split(',').filter(s => s.trim() !== '').map(n => parseInt(n.trim()));
        }
 
-       // 确保至少有1个号码 (通常是7个: 6平+1特)
        if (nums.length < 1) continue;
 
-       const special = nums.length >= 7 ? nums[nums.length - 1] : nums[nums.length - 1]; // 取最后一个作为特码
-       const normalNums = nums.length >= 7 ? nums.slice(0, 6) : nums; // 前面的是平码
+       const special = nums.length >= 7 ? nums[nums.length - 1] : nums[nums.length - 1]; 
+       const normalNums = nums.length >= 7 ? nums.slice(0, 6) : nums; 
 
-       // 简单的去重/验证逻辑，防止 API 偶尔返回奇怪数据
        const drawNumStr = String(drawNumber);
        if (processedDraws.has(drawNumStr)) continue;
        
@@ -269,14 +264,13 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
        ));
        count++;
        
-       if (batch.length >= 50) break; // 限制批量插入大小
+       if (batch.length >= 50) break;
     }
 
     if (batch.length > 0) {
       await env.DB.batch(batch);
       await sendMessage(env.TG_BOT_TOKEN, chatId, `✅ [${lottery.name}] 同步成功！\n共更新 ${count} 条记录。\n最新期号: ${list[0]?.expect || list[0]?.issue || list[0]?.period || 'Unknown'}`);
     } else {
-       // 如果找到了列表但没解析出数据，打印第一条数据结构
        const debugInfo = firstErrorItem ? JSON.stringify(firstErrorItem).substring(0, 200) : "无法解析字段";
        await sendMessage(env.TG_BOT_TOKEN, chatId, `⚠️ 解析失败。\n样本数据: ${debugInfo}\n请检查代码中的字段映射。`);
     }
@@ -286,7 +280,6 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
   }
 }
 
-// 4. 查看记录
 async function doViewRecords(env: any, chatId: number, lotteryId: string) {
   const lotteryName = LOTTERIES.find(l => l.id === lotteryId)?.name || lotteryId;
 
@@ -317,21 +310,14 @@ async function doViewRecords(env: any, chatId: number, lotteryId: string) {
   await sendMessage(env.TG_BOT_TOKEN, chatId, msg);
 }
 
-// --- Telegram API Helpers ---
-
 async function sendMessage(token: string, chatId: number, text: string, removeKeyboard = false) {
   if(!token) return;
-  
   const body: any = { 
     chat_id: chatId, 
     text: text, 
     parse_mode: 'Markdown' 
   };
-
-  if (removeKeyboard) {
-      body.reply_markup = { remove_keyboard: true };
-  }
-
+  if (removeKeyboard) body.reply_markup = { remove_keyboard: true };
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -344,9 +330,6 @@ async function answerCallbackQuery(token: string, callbackQueryId: string, text:
   await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      callback_query_id: callbackQueryId, 
-      text: text 
-    })
+    body: JSON.stringify({ callback_query_id: callbackQueryId, text: text })
   });
 }

@@ -17,6 +17,12 @@ export interface PredictionResult {
   timestamp?: number;
 }
 
+export interface PredictionHistoryItem {
+  drawNumber: string;
+  prediction: PredictionResult;
+  timestamp: number;
+}
+
 export interface NumberFrequency {
   number: number;
   count: number;

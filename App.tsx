@@ -1,12 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { DrawResult, LotteryConfig, PredictionResult } from './types';
+import { DrawResult, LotteryConfig, PredictionResult, PredictionHistoryItem } from './types';
 import { LOTTERY_CONFIGS } from './constants';
 import { fetchLotteryHistory } from './geminiService';
 import { LotteryTabs } from './components/LotteryTabs';
 import { LatestDraw } from './components/LatestDraw';
 import { HistoryList } from './components/HistoryList';
+import { PredictionHistoryList } from './components/PredictionHistoryList';
 import { PredictionPanel } from './views/PredictionPanel';
+import { History, Trophy } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -26,8 +28,12 @@ const App: React.FC = () => {
   
   const [history, setHistory] = useState<DrawResult[]>([]);
   const [prediction, setPrediction] = useState<PredictionResult | null>(null);
+  const [predHistory, setPredHistory] = useState<PredictionHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // UI States for toggling sections
+  const [activeSection, setActiveSection] = useState<'none' | 'history' | 'prediction_history'>('none');
 
   useEffect(() => {
     if (window.Telegram?.WebApp) {
@@ -43,6 +49,7 @@ const App: React.FC = () => {
       const result = await fetchLotteryHistory(selectedLottery);
       setHistory(result.history);
       setPrediction(result.prediction);
+      setPredHistory(result.predictionHistory || []);
     } catch (err: any) {
       console.error(err);
       setError(err.message || "加载失败");
@@ -53,7 +60,20 @@ const App: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    setActiveSection('none'); // Reset expanded section on switch
   }, [selectedLottery]);
+
+  // Calculate next draw ID for display
+  const getNextDrawId = () => {
+      if (history.length === 0) return '???';
+      const last = history[0].drawNumber;
+      // Try simple integer increment first
+      try {
+          return (BigInt(last) + 1n).toString();
+      } catch {
+          return `${last}_Next`;
+      }
+  };
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-slate-100 font-sans selection:bg-amber-500/30 pb-10">
@@ -72,10 +92,39 @@ const App: React.FC = () => {
           error={error}
           onPredict={loadData}
           lotteryName={selectedLottery.name}
+          nextDrawId={getNextDrawId()}
         />
       </div>
 
-      <HistoryList history={history} />
+      {/* History & Records Section Controls */}
+      <div className="px-4 mt-8 flex gap-3">
+          <button 
+            onClick={() => setActiveSection(activeSection === 'history' ? 'none' : 'history')}
+            className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all
+                ${activeSection === 'history' ? 'bg-slate-700 text-white ring-1 ring-slate-500' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}
+          >
+             <History className="w-4 h-4" /> 历史开奖
+          </button>
+          
+          <button 
+            onClick={() => setActiveSection(activeSection === 'prediction_history' ? 'none' : 'prediction_history')}
+            className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all
+                ${activeSection === 'prediction_history' ? 'bg-amber-900/40 text-amber-400 ring-1 ring-amber-500/50' : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800'}`}
+          >
+             <Trophy className="w-4 h-4" /> 预测战绩
+          </button>
+      </div>
+
+      {/* Conditional Rendering of Lists */}
+      <div className="mx-4 mt-4 animate-in slide-in-from-top-2 duration-300">
+          {activeSection === 'history' && (
+             <HistoryList history={history} />
+          )}
+
+          {activeSection === 'prediction_history' && (
+             <PredictionHistoryList predictions={predHistory} drawHistory={history} />
+          )}
+      </div>
     </div>
   );
 };

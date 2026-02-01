@@ -1,8 +1,7 @@
 
 import React from 'react';
-import { RefreshCcw, AlertCircle, Crown, Layers, Hash, Palette } from 'lucide-react';
+import { Crown, Layers, Hash, Palette, AlertCircle } from 'lucide-react';
 import { PredictionResult } from '../types';
-import Ball from '../components/Ball';
 import { COLOR_NAMES } from '../constants';
 
 interface PredictionPanelProps {
@@ -11,9 +10,10 @@ interface PredictionPanelProps {
   error: string | null;
   onPredict: () => void;
   lotteryName: string;
+  nextDrawId: string;
 }
 
-export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, isLoading, error, onPredict, lotteryName }) => {
+export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, isLoading, error, onPredict, lotteryName, nextDrawId }) => {
   
   if (isLoading) {
     return (
@@ -39,19 +39,25 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between px-2">
-         <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-slate-800/50 px-2 py-1 rounded">
-            {lotteryName} 专家推荐
-          </span>
-          {prediction.timestamp && (
-             <span className="text-[10px] text-slate-600">
-               {new Date(prediction.timestamp).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})} 更新
-             </span>
-          )}
+      {/* Prominent Header */}
+      <div className="relative py-2 text-center">
+         <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-600 drop-shadow-sm tracking-tight">
+            第 {nextDrawId} 期 预测结果
+         </h1>
+         <div className="flex justify-center items-center gap-2 mt-1">
+            <span className="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">
+              {lotteryName}
+            </span>
+            {prediction.timestamp && (
+               <span className="text-[10px] text-slate-500">
+                 更新于 {new Date(prediction.timestamp).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}
+               </span>
+            )}
+         </div>
       </div>
 
       {/* 1. 推荐六肖 */}
-      <section className="glass-panel rounded-2xl p-4 relative overflow-hidden">
+      <section className="glass-panel rounded-2xl p-4 relative overflow-hidden border border-amber-500/20 shadow-lg shadow-amber-900/10">
         <div className="absolute top-0 right-0 p-3 opacity-5">
             <Crown className="w-16 h-16" />
         </div>
@@ -61,7 +67,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
         <div className="flex justify-between px-2">
             {prediction.zodiacs.map((z, i) => (
                 <div key={i} className="flex flex-col items-center gap-1">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-b from-amber-500 to-amber-700 shadow-lg shadow-amber-900/50 flex items-center justify-center text-white font-bold text-lg border border-amber-400/30">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 shadow-lg shadow-amber-900/40 flex items-center justify-center text-white font-bold text-lg border-2 border-amber-400/20 transform hover:scale-110 transition-transform">
                         {z}
                     </div>
                 </div>
@@ -76,7 +82,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
         </h3>
         <div className="grid grid-cols-6 gap-2 sm:gap-3">
             {prediction.numbers_18.map((num, i) => (
-                <div key={i} className="aspect-square rounded-lg bg-slate-800/80 flex items-center justify-center border border-slate-700 text-slate-200 font-mono font-bold text-sm shadow-inner">
+                <div key={i} className="aspect-square rounded-lg bg-slate-800/80 flex items-center justify-center border border-slate-700 text-slate-200 font-mono font-bold text-sm shadow-inner hover:bg-slate-700 transition-colors">
                     {num}
                 </div>
             ))}
