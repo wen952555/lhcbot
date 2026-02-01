@@ -3,10 +3,20 @@ import { generateDeterministicPrediction } from '../analysis';
 
 // 定义彩种配置
 const LOTTERIES = [
-  { id: 'new_macau', name: '新澳门六合', envKey: 'API_URL_NEW_MACAU' },
-  { id: 'hk_jc', name: '香港六合彩', envKey: 'API_URL_HK_JC' },
-  { id: 'old_macau', name: '老澳门六合', envKey: 'API_URL_OLD_MACAU' }
+  { id: 'new_macau', name: '新澳门', envKey: 'API_URL_NEW_MACAU' },
+  { id: 'hk_jc', name: '香港', envKey: 'API_URL_HK_JC' },
+  { id: 'old_macau', name: '老澳门', envKey: 'API_URL_OLD_MACAU' }
 ];
+
+// 定义按钮动作映射 (用于解析用户点击键盘发送的文本)
+const ACTION_MAP: Record<string, { action: string, lotteryId: string }> = {};
+
+// 初始化映射关系
+LOTTERIES.forEach(l => {
+  ACTION_MAP[`🔮 ${l.name}预测`] = { action: 'predict', lotteryId: l.id };
+  ACTION_MAP[`🔄 ${l.name}同步`] = { action: 'sync', lotteryId: l.id };
+  ACTION_MAP[`📊 ${l.name}记录`] = { action: 'view', lotteryId: l.id };
+});
 
 export async function onRequestPost(context: any) {
   const { request, env } = context;
@@ -14,12 +24,13 @@ export async function onRequestPost(context: any) {
   try {
     const payload = await request.json();
     
-    // 处理 Callback Query (点击按钮)
+    // 1. 处理 Callback Query (兼容旧版消息按钮，防止报错)
     if (payload.callback_query) {
-      return await handleCallbackQuery(payload.callback_query, env);
+      await answerCallbackQuery(env.TG_BOT_TOKEN, payload.callback_query.id, "请使用新版键盘菜单");
+      return new Response('OK');
     }
 
-    // 处理普通消息
+    // 2. 处理普通消息 (主要逻辑)
     if (payload.message) {
       return await handleMessage(payload.message, env);
     }
@@ -40,55 +51,35 @@ async function handleMessage(message: any, env: any) {
   // 1. 权限验证
   const adminId = env.TG_ADMIN_ID ? parseInt(env.TG_ADMIN_ID) : null;
   if (adminId && userId !== adminId) {
-     await sendMessage(env.TG_BOT_TOKEN, chatId, "⛔ 权限不足");
+     // 如果没有权限，不显示键盘，只提示
+     await sendMessage(env.TG_BOT_TOKEN, chatId, "⛔ 权限不足", true); 
      return new Response('Unauthorized');
   }
 
-  // 2. 命令处理
+  // 2. 匹配键盘指令
+  if (text && ACTION_MAP[text]) {
+    const { action, lotteryId } = ACTION_MAP[text];
+    await executeAction(env, chatId, action, lotteryId);
+    return new Response('OK');
+  }
+
+  // 3. 处理系统命令
   if (text === '/start' || text === '/menu') {
-    await sendDashboard(env.TG_BOT_TOKEN, chatId);
+    await sendKeyboardMenu(env.TG_BOT_TOKEN, chatId);
   } else if (text && text.startsWith('/predict')) {
-    // 兼容旧命令
+    // 兼容旧命令 /predict new_macau
     const parts = text.split(' ');
-    if (parts[1]) await doPredict(env, chatId, parts[1]);
+    if (parts[1]) await executeAction(env, chatId, 'predict', parts[1]);
   } else {
-    // 默认回复菜单
-    await sendDashboard(env.TG_BOT_TOKEN, chatId);
+    // 其他文本，默认回复菜单
+    await sendKeyboardMenu(env.TG_BOT_TOKEN, chatId);
   }
 
   return new Response('OK');
 }
 
-// --- 回调查询处理 (按钮点击) ---
-async function handleCallbackQuery(query: any, env: any) {
-  const chatId = query.message.chat.id;
-  const data = query.data; // e.g., "predict:new_macau"
-  const callbackQueryId = query.id;
-
-  // 1. 权限验证 (再次验证，防止转发)
-  const userId = query.from?.id;
-  const adminId = env.TG_ADMIN_ID ? parseInt(env.TG_ADMIN_ID) : null;
-  
-  if (adminId && userId !== adminId) {
-    await answerCallbackQuery(env.TG_BOT_TOKEN, callbackQueryId, "⛔ 权限不足", true);
-    return new Response('OK');
-  }
-
-  const [action, lotteryId] = data.split(':');
-
-  if (action === 'ignore') {
-     await answerCallbackQuery(env.TG_BOT_TOKEN, callbackQueryId);
-     return new Response('OK');
-  }
-
-  if (!lotteryId && action !== 'refresh_menu') {
-      await answerCallbackQuery(env.TG_BOT_TOKEN, callbackQueryId, "参数错误");
-      return new Response('OK');
-  }
-
-  // 快速响应 Telegram，消除加载状态
-  await answerCallbackQuery(env.TG_BOT_TOKEN, callbackQueryId, `正在执行: ${action}...`);
-
+// --- 统一动作执行入口 ---
+async function executeAction(env: any, chatId: number, action: string, lotteryId: string) {
   try {
     switch (action) {
       case 'predict':
@@ -100,9 +91,6 @@ async function handleCallbackQuery(query: any, env: any) {
       case 'view':
         await doViewRecords(env, chatId, lotteryId);
         break;
-      case 'refresh_menu':
-        await sendDashboard(env.TG_BOT_TOKEN, chatId);
-        break;
       default:
         await sendMessage(env.TG_BOT_TOKEN, chatId, "未知操作");
     }
@@ -110,40 +98,39 @@ async function handleCallbackQuery(query: any, env: any) {
     console.error(err);
     await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ 操作失败: ${err.message}`);
   }
-
-  return new Response('OK');
 }
 
 // --- 业务逻辑 ---
 
-// 1. 发送管理菜单
-async function sendDashboard(token: string, chatId: number) {
-  const keyboard = {
-    inline_keyboard: LOTTERIES.flatMap(lottery => [
-      [{ text: `🎫 ${lottery.name} (${lottery.id})`, callback_data: `ignore` }],
-      [
-        { text: "🔮 预测", callback_data: `predict:${lottery.id}` },
-        { text: "🔄 同步记录", callback_data: `sync:${lottery.id}` },
-        { text: "📊 查看记录", callback_data: `view:${lottery.id}` }
-      ]
-    ])
-  };
+// 1. 发送键盘菜单 (ReplyKeyboardMarkup)
+async function sendKeyboardMenu(token: string, chatId: number) {
+  // 构建键盘布局：每个彩种一行，包含3个按钮
+  const keyboard = LOTTERIES.map(l => [
+    { text: `🔮 ${l.name}预测` },
+    { text: `🔄 ${l.name}同步` },
+    { text: `📊 ${l.name}记录` }
+  ]);
 
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       chat_id: chatId,
-      text: "👋 **六合助手管理控制台**\n请选择下方功能进行操作：",
+      text: "👋 **管理控制台**\n\n请点击下方键盘按钮进行操作：",
       parse_mode: 'Markdown',
-      reply_markup: keyboard
+      reply_markup: {
+        keyboard: keyboard,
+        resize_keyboard: true, // 自适应高度，更美观
+        one_time_keyboard: false // 保持键盘显示
+      }
     })
   });
 }
 
 // 2. 执行预测
 async function doPredict(env: any, chatId: number, lotteryId: string) {
-  await sendMessage(env.TG_BOT_TOKEN, chatId, `⏳ 正在生成 [${lotteryId}] 预测...`);
+  const lotteryName = LOTTERIES.find(l => l.id === lotteryId)?.name || lotteryId;
+  await sendMessage(env.TG_BOT_TOKEN, chatId, `⏳ 正在生成 [${lotteryName}] 预测...`);
 
   // Fetch History
   let historyData = [];
@@ -177,7 +164,7 @@ async function doPredict(env: any, chatId: number, lotteryId: string) {
       `).bind(lotteryId, JSON.stringify(prediction), Date.now()).run();
   }
 
-  const msg = `✅ **[${lotteryId}] 预测更新成功**\n` +
+  const msg = `✅ **[${lotteryName}] 预测更新成功**\n` +
               `------------------------------\n` +
               `🐯 **六肖**: ${prediction.zodiacs.join(' ')}\n` +
               `🎱 **18码**: ${prediction.numbers_18.slice(0, 10).join(',')}...\n` +
@@ -189,7 +176,7 @@ async function doPredict(env: any, chatId: number, lotteryId: string) {
   await sendMessage(env.TG_BOT_TOKEN, chatId, msg);
 }
 
-// 3. 执行同步 (从外部API获取数据)
+// 3. 执行同步 (增强版)
 async function doSync(env: any, chatId: number, lotteryId: string) {
   const lottery = LOTTERIES.find(l => l.id === lotteryId);
   if (!lottery) return;
@@ -200,20 +187,30 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
     return;
   }
 
-  await sendMessage(env.TG_BOT_TOKEN, chatId, `⏳ 正在从源站同步 [${lottery.name}] 数据...`);
+  await sendMessage(env.TG_BOT_TOKEN, chatId, `⏳ 正在同步 [${lottery.name}] ...`);
 
   try {
-    const resp = await fetch(apiUrl);
+    const resp = await fetch(apiUrl, { 
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } 
+    });
+    
     if (!resp.ok) throw new Error(`HTTP Error ${resp.status}`);
     
-    const data: any = await resp.json();
-    // 假设 API 返回格式是 { data: [...] } 或直接是 [...]
-    // 这里需要根据实际的外部 API 格式进行适配。
-    // 下面是一个通用的解析逻辑，适配常见的 { expect/issue, opencode/code } 格式
-    const list = Array.isArray(data) ? data : (data.data || data.list || []);
+    const rawData = await resp.json();
+    let list: any[] = [];
+
+    // 智能解析列表结构
+    if (Array.isArray(rawData)) {
+        list = rawData;
+    } else if (rawData && typeof rawData === 'object') {
+        // 尝试常见的字段名
+        list = rawData.data || rawData.list || rawData.result?.data || rawData.rows || [];
+    }
 
     if (list.length === 0) {
-      await sendMessage(env.TG_BOT_TOKEN, chatId, "⚠️ 源站返回数据为空。");
+      // 调试：如果没找到数据，打印一下 Key 帮助排查
+      const keys = rawData && typeof rawData === 'object' ? Object.keys(rawData).join(', ') : 'not_object';
+      await sendMessage(env.TG_BOT_TOKEN, chatId, `⚠️ 未找到数据列表。\nAPI返回Keys: [${keys}]`);
       return;
     }
 
@@ -224,27 +221,39 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
     `);
 
     const batch = [];
+    let firstErrorItem = null;
 
     for (const item of list) {
-       // 适配字段：期号(expect/issue/draw), 号码(opencode/code/numbers), 时间(opentime/time)
-       const drawNumber = item.expect || item.issue || item.drawNumber || item.draw;
-       const codeStr = item.opencode || item.code || item.numbers;
-       const openTime = item.opentime || item.time || item.openTime || new Date().toISOString();
+       // 智能解析字段：期号
+       const drawNumber = item.expect || item.issue || item.period || item.qishu || item.drawNumber || item.draw || item.number || item.id;
+       // 智能解析字段：号码
+       const codeStr = item.opencode || item.code || item.openCode || item.numbers || item.haoMa || item.data || item.result;
+       // 智能解析字段：时间
+       const openTime = item.opentime || item.time || item.openTime || item.dateline || new Date().toISOString();
 
-       if (!drawNumber || !codeStr) continue;
+       if (!drawNumber || !codeStr) {
+           if (!firstErrorItem) firstErrorItem = item;
+           continue;
+       }
 
-       // 解析号码: "01,02,03,04,05,06+07" 或 "01,02,03,04,05,06,07"
+       // 解析号码
        let nums: number[] = [];
        if (Array.isArray(codeStr)) {
          nums = codeStr.map(Number);
        } else if (typeof codeStr === 'string') {
-         nums = codeStr.replace(/\+/g, ',').split(',').map(n => parseInt(n.trim()));
+         // 支持 "01,02+03", "01 02 03", "1,2,3" 等格式
+         const cleanStr = codeStr.replace(/[+＋|｜]/g, ',').replace(/\s+/g, ',');
+         nums = cleanStr.split(',').filter(s => s.trim() !== '').map(n => parseInt(n.trim()));
        }
 
-       if (nums.length < 7) continue;
+       // 确保至少有1个号码 (通常是7个: 6平+1特)
+       if (nums.length < 1) continue;
 
-       const special = nums.pop() || 0; // 最后一个是特码
-       const normalNums = nums;
+       const special = nums.length >= 7 ? nums[nums.length - 1] : nums[nums.length - 1]; // 取最后一个作为特码
+       const normalNums = nums.length >= 7 ? nums.slice(0, 6) : nums; // 前面的是平码
+
+       // 简单的去重/验证逻辑，防止 API 偶尔返回奇怪数据
+       if (batch.find((b: any) => b.drawNumber === String(drawNumber))) continue;
 
        batch.push(stmt.bind(
          lotteryId, 
@@ -256,15 +265,17 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
        ));
        count++;
        
-       // D1 Batch limit usually 100
-       if (batch.length >= 50) break; 
+       if (batch.length >= 50) break; // 限制批量插入大小
     }
 
     if (batch.length > 0) {
       await env.DB.batch(batch);
+      await sendMessage(env.TG_BOT_TOKEN, chatId, `✅ [${lottery.name}] 同步成功！\n共更新 ${count} 条记录。\n最新期号: ${list[0]?.expect || list[0]?.issue || list[0]?.period || 'Unknown'}`);
+    } else {
+       // 如果找到了列表但没解析出数据，打印第一条数据结构
+       const debugInfo = firstErrorItem ? JSON.stringify(firstErrorItem).substring(0, 200) : "无法解析字段";
+       await sendMessage(env.TG_BOT_TOKEN, chatId, `⚠️ 解析失败。\n样本数据: ${debugInfo}\n请检查代码中的字段映射。`);
     }
-
-    await sendMessage(env.TG_BOT_TOKEN, chatId, `✅ 同步完成！共处理 ${count} 条记录。`);
 
   } catch (e: any) {
     await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ 同步出错: ${e.message}`);
@@ -273,6 +284,8 @@ async function doSync(env: any, chatId: number, lotteryId: string) {
 
 // 4. 查看记录
 async function doViewRecords(env: any, chatId: number, lotteryId: string) {
+  const lotteryName = LOTTERIES.find(l => l.id === lotteryId)?.name || lotteryId;
+
   if (!env.DB) {
      await sendMessage(env.TG_BOT_TOKEN, chatId, "❌ 数据库未连接");
      return;
@@ -286,11 +299,11 @@ async function doViewRecords(env: any, chatId: number, lotteryId: string) {
   `).bind(lotteryId).all();
 
   if (!results || results.length === 0) {
-    await sendMessage(env.TG_BOT_TOKEN, chatId, `📭 [${lotteryId}] 暂无记录，请先同步。`);
+    await sendMessage(env.TG_BOT_TOKEN, chatId, `📭 [${lotteryName}] 暂无记录，请先同步。`);
     return;
   }
 
-  let msg = `📊 **[${lotteryId}] 近10期开奖**\n\n`;
+  let msg = `📊 **[${lotteryName}] 近10期开奖**\n\n`;
   results.forEach((row: any) => {
     const nums = JSON.parse(row.numbers).map((n: number) => String(n).padStart(2, '0')).join(',');
     const sp = String(row.special_number).padStart(2, '0');
@@ -302,24 +315,34 @@ async function doViewRecords(env: any, chatId: number, lotteryId: string) {
 
 // --- Telegram API Helpers ---
 
-async function sendMessage(token: string, chatId: number, text: string) {
+async function sendMessage(token: string, chatId: number, text: string, removeKeyboard = false) {
   if(!token) return;
+  
+  const body: any = { 
+    chat_id: chatId, 
+    text: text, 
+    parse_mode: 'Markdown' 
+  };
+
+  if (removeKeyboard) {
+      body.reply_markup = { remove_keyboard: true };
+  }
+
   await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'Markdown' })
+    body: JSON.stringify(body)
   });
 }
 
-async function answerCallbackQuery(token: string, callbackQueryId: string, text: string = "", showAlert = false) {
+async function answerCallbackQuery(token: string, callbackQueryId: string, text: string) {
   if(!token) return;
   await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
       callback_query_id: callbackQueryId, 
-      text: text, 
-      show_alert: showAlert 
+      text: text 
     })
   });
 }
