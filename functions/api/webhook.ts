@@ -1,5 +1,5 @@
 
-import { generateDeterministicPrediction } from '../../analysis';
+import { generateDeterministicPrediction } from '../analysis';
 
 // 定义彩种配置
 const LOTTERIES = [
@@ -75,6 +75,11 @@ async function handleCallbackQuery(query: any, env: any) {
   }
 
   const [action, lotteryId] = data.split(':');
+
+  if (action === 'ignore') {
+     await answerCallbackQuery(env.TG_BOT_TOKEN, callbackQueryId);
+     return new Response('OK');
+  }
 
   if (!lotteryId && action !== 'refresh_menu') {
       await answerCallbackQuery(env.TG_BOT_TOKEN, callbackQueryId, "参数错误");
@@ -306,7 +311,7 @@ async function sendMessage(token: string, chatId: number, text: string) {
   });
 }
 
-async function answerCallbackQuery(token: string, callbackQueryId: string, text: string, showAlert = false) {
+async function answerCallbackQuery(token: string, callbackQueryId: string, text: string = "", showAlert = false) {
   if(!token) return;
   await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
     method: 'POST',
