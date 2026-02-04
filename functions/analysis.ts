@@ -96,7 +96,7 @@ class AdvancedAnalytics {
 
 export function generateDeterministicPrediction(history: any[]) {
     if (!history || history.length < 15) {
-        return { zodiacs:[], numbers_18:[], heads:[], tails:[], colors:[], reasoning:"数据积累中，暂无法开启深度预测", confidence:0 };
+        return { zodiacs:[], numbers_18:[], numbers_8:[], heads:[], tails:[], colors:[], reasoning:"", confidence:0 };
     }
 
     const engine = new AdvancedAnalytics(history);
@@ -153,6 +153,9 @@ export function generateDeterministicPrediction(history: any[]) {
     const topHot = sorted.slice(0, 15);
     const coldGuard = sorted.filter(n => engine.omissions[n] > 40).slice(0, 3);
     const numbers_18 = Array.from(new Set([...topHot, ...coldGuard])).slice(0, 18).sort((a,b)=>a-b);
+    
+    // 回测推荐8码 (直接取得分最高的8个)
+    const numbers_8 = sorted.slice(0, 8).sort((a,b)=>a-b);
 
     const zodiacRank = ZODIACS.map(z => {
         const score = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49]
@@ -170,6 +173,7 @@ export function generateDeterministicPrediction(history: any[]) {
     return {
         zodiacs: zodiacRank.slice(0, 6).map(i => i.z),
         numbers_18,
+        numbers_8,
         heads: [0,1,2,3,4].sort((a,b) => {
             const sa = sorted.slice(0, 15).filter(n => Math.floor(n/10) === a).length;
             const sb = sorted.slice(0, 15).filter(n => Math.floor(n/10) === b).length;
@@ -181,7 +185,7 @@ export function generateDeterministicPrediction(history: any[]) {
             return sb - sa;
         }).slice(0, 4).sort(),
         colors,
-        reasoning: `后台已选定【${bestStrategy.description}】。系统分析发现：上期特码 ${lastSP} 与平码组合在历史序列中与[${zodiacRank[0].z}]肖存在极强关联概率，伴随${zodiacRank[1].z}、${zodiacRank[2].z}属性的共振爆发，建议关注${colors[0] === 'red' ? '红' : '蓝'}波段。`,
+        reasoning: `【${bestStrategy.description}】`, // 仅保留模式名称
         confidence: 88
     };
 }

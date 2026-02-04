@@ -321,11 +321,11 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
     const msg = `✅ <b>[${lotteryName}] 第 ${nextDrawNumber} 期 预测</b>\n` +
                 `------------------------------\n` +
                 `🐯 <b>六肖</b>: ${prediction.zodiacs.join(' ')}\n` +
+                `⭐ <b>8码</b>: ${prediction.numbers_8.join(',')}\n` +
                 `🎱 <b>18码</b>: ${prediction.numbers_18.join(',')}\n` +
                 `🔢 <b>头数</b>: ${prediction.heads.join(', ')}头\n` +
                 `🔚 <b>尾数</b>: ${prediction.tails.join(', ')}尾\n` +
                 `🎨 <b>波色</b>: ${prediction.colors.map((c: string) => c==='red'?'红':c==='blue'?'蓝':'绿').join(' ')}\n` +
-                `💡 <b>分析</b>: ${prediction.reasoning}\n` + 
                 `🔥 <b>信心</b>: ${prediction.confidence}%`;
 
     return { message: msg, prediction };

@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Crown, Layers, Hash, Palette, AlertCircle, BrainCircuit } from 'lucide-react';
+import { Crown, Layers, Hash, Palette, AlertCircle, BrainCircuit, Star } from 'lucide-react';
 import { PredictionResult } from '../types';
 import { COLOR_NAMES } from '../constants';
 
@@ -67,7 +67,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
         </div>
         <div className="flex items-center justify-between mb-4">
             <h3 className="text-amber-600 text-[11px] font-black flex items-center gap-1.5 bg-amber-50 px-2 py-0.5 rounded-md">
-                <Crown className="w-3.5 h-3.5" /> 必中六肖推荐
+                <Crown className="w-3.5 h-3.5" /> 核心六肖推荐
             </h3>
             <span className="text-[9px] text-slate-400">历史高关联度肖</span>
         </div>
@@ -82,7 +82,27 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
         </div>
       </section>
 
-      {/* 2. 精选18码 */}
+      {/* 2. 回测推荐8码 (New Feature) */}
+      <section className="bg-gradient-to-r from-amber-500 to-orange-600 rounded-2xl p-4 shadow-xl shadow-amber-500/20 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-2 opacity-10">
+            <Star className="w-16 h-16 rotate-12" />
+        </div>
+        <div className="flex items-center justify-between mb-3 relative z-10">
+            <h3 className="text-[11px] font-black flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-md">
+                <Star className="w-3.5 h-3.5" /> 回测精选8码
+            </h3>
+            <span className="text-[9px] text-white/70">高频回测锁定</span>
+        </div>
+        <div className="grid grid-cols-4 gap-3 relative z-10">
+            {prediction.numbers_8.map((num, i) => (
+                <div key={i} className="bg-white/10 backdrop-blur-lg rounded-xl py-2 flex items-center justify-center border border-white/20 font-mono font-black text-lg shadow-inner">
+                    {num.toString().padStart(2, '0')}
+                </div>
+            ))}
+        </div>
+      </section>
+
+      {/* 3. 精选18码 */}
       <section className="glass-panel rounded-2xl p-4">
         <h3 className="text-blue-500 text-[11px] font-black mb-3 flex items-center gap-1.5 bg-blue-50 px-2 py-0.5 rounded-md w-fit">
             <Hash className="w-3.5 h-3.5" /> 智能筛选18码
@@ -96,7 +116,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
         </div>
       </section>
 
-      {/* 3. 多维度建议 */}
+      {/* 4. 多维度建议 */}
       <div className="grid grid-cols-2 gap-3">
           <div className="glass-panel rounded-2xl p-4 border border-slate-100">
              <h3 className="text-slate-400 text-[10px] font-bold mb-3 flex items-center gap-1 uppercase">
@@ -140,19 +160,6 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
                ))}
            </div>
       </section>
-      
-      {/* 算法分析说明 */}
-      <div className="bg-slate-800 rounded-2xl p-5 text-white shadow-2xl relative overflow-hidden">
-        <div className="absolute right-0 bottom-0 opacity-10">
-            <BrainCircuit className="w-24 h-24" />
-        </div>
-        <h4 className="text-amber-400 text-[10px] font-black mb-2 flex items-center gap-1 uppercase tracking-widest">
-            Algorithm Reasoning / 分析说明
-        </h4>
-        <p className="text-[11px] text-slate-300 leading-relaxed font-medium">
-          {prediction.reasoning}
-        </p>
-      </div>
 
       <div className="p-4 flex items-start gap-2 opacity-50">
         <AlertCircle className="text-slate-400 w-3.5 h-3.5 flex-shrink-0 mt-0.5" />

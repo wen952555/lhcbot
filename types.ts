@@ -9,6 +9,7 @@ export interface DrawResult {
 export interface PredictionResult {
   zodiacs: string[];      // 推荐六肖
   numbers_18: number[];   // 推荐18码
+  numbers_8: number[];    // 回测推荐8码 (高胜率精选)
   heads: number[];        // 推荐3个头数
   tails: number[];        // 推荐4个尾数
   colors: string[];       // 推荐两个波色 ('red' | 'blue' | 'green')
