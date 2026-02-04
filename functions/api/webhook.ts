@@ -14,12 +14,10 @@ export async function onRequestPost(context: any) {
   try {
     const payload = await request.json();
     
-    // 不再处理 callback_query
     if (payload.callback_query) {
         return new Response('OK');
     }
 
-    // 处理普通消息
     if (payload.message) {
       return await handleMessage(payload.message, env);
     }
@@ -36,11 +34,9 @@ async function handleMessage(message: any, env: any) {
   const text = message.text?.trim();
   const userId = message.from?.id;
 
-  // 权限检查
   const adminId = env.TG_ADMIN_ID ? parseInt(env.TG_ADMIN_ID) : null;
   const isAdmin = adminId && userId === adminId;
 
-  // 命令路由
   switch (text) {
       case '/start':
       case '/help':
@@ -77,14 +73,11 @@ async function handleMessage(message: any, env: any) {
           break;
       
       default:
-          // 默认不响应无关文本
           break;
   }
 
   return new Response('OK');
 }
-
-// --- Interaction Functions ---
 
 async function sendHelpMessage(token: string, chatId: number) {
   const msg = "🤖 <b>六合大数据助手</b>\n\n" +
@@ -95,15 +88,11 @@ async function sendHelpMessage(token: string, chatId: number) {
               "🔄 <b>一键同步</b> - 同步最新数据\n" +
               "📢 <b>推送频道</b> - 推送预测到频道";
 
-  // 尝试移除可能存在的旧键盘
   await sendMessage(token, chatId, msg, {
       reply_markup: { remove_keyboard: true }
   });
 }
 
-// --- Logic Functions ---
-
-// 1. 批量预测 (直接发给 Bot 用户，连续3条)
 async function doBatchPredictInBot(env: any, chatId: number) {
     await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在分析历史数据生成预测...");
 
@@ -111,7 +100,6 @@ async function doBatchPredictInBot(env: any, chatId: number) {
         try {
             const { message } = await generatePredictionMessage(env, lottery.id);
             await sendMessage(env.TG_BOT_TOKEN, chatId, message);
-            // 延迟防止消息乱序
             await new Promise(r => setTimeout(r, 1200)); 
         } catch (e: any) {
             await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ <b>[${lottery.name}]</b> 预测失败: ${e.message}`);
@@ -119,7 +107,6 @@ async function doBatchPredictInBot(env: any, chatId: number) {
     }
 }
 
-// 2. 批量查看记录 (直接发给 Bot 用户，连续3条)
 async function doBatchViewInBot(env: any, chatId: number) {
     await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 正在获取最近10期开奖记录...");
 
@@ -150,7 +137,7 @@ async function doBatchViewInBot(env: any, chatId: number) {
             });
 
             await sendMessage(env.TG_BOT_TOKEN, chatId, msg);
-            await new Promise(r => setTimeout(r, 1000)); // 延迟
+            await new Promise(r => setTimeout(r, 1000)); 
 
         } catch (e: any) {
             await sendMessage(env.TG_BOT_TOKEN, chatId, `❌ <b>[${lottery.name}]</b> 查询失败: ${e.message}`);
@@ -158,7 +145,6 @@ async function doBatchViewInBot(env: any, chatId: number) {
     }
 }
 
-// 3. 一键同步所有
 async function doSyncAll(env: any, chatId: number) {
     await sendMessage(env.TG_BOT_TOKEN, chatId, "⏳ 开始同步所有彩种数据...");
     
@@ -176,7 +162,6 @@ async function doSyncAll(env: any, chatId: number) {
     await sendMessage(env.TG_BOT_TOKEN, chatId, report);
 }
 
-// 4. 推送全部到频道 (管理员功能)
 async function doPushAllToChannel(env: any, adminChatId: number) {
     const channelId = env.TG_CHANNEL_ID;
     if (!channelId) {
@@ -193,7 +178,7 @@ async function doPushAllToChannel(env: any, adminChatId: number) {
             const { message } = await generatePredictionMessage(env, lottery.id);
             await sendMessage(env.TG_BOT_TOKEN, channelId, message);
             successCount++;
-            await new Promise(r => setTimeout(r, 2000)); // 频道推送间隔需稍长
+            await new Promise(r => setTimeout(r, 2000)); 
         } catch (e: any) {
             console.error(`Push failed for ${lottery.name}`, e);
             await sendMessage(env.TG_BOT_TOKEN, adminChatId, `⚠️ [${lottery.name}] 推送失败: ${e.message}`);
@@ -202,8 +187,6 @@ async function doPushAllToChannel(env: any, adminChatId: number) {
 
     await sendMessage(env.TG_BOT_TOKEN, adminChatId, `✅ 推送完成 (${successCount}/${LOTTERIES.length})`);
 }
-
-// --- Core Helpers ---
 
 async function syncLotteryData(env: any, lottery: any): Promise<number> {
     const apiUrl = env[lottery.envKey];
@@ -248,8 +231,8 @@ async function syncLotteryData(env: any, lottery: any): Promise<number> {
 
        if (nums.length < 1) continue;
 
-       const special = nums.length >= 7 ? nums[nums.length - 1] : nums[nums.length - 1]; 
-       const normalNums = nums.length >= 7 ? nums.slice(0, 6) : nums; 
+       const special = nums[nums.length - 1]; 
+       const normalNums = nums.length >= 7 ? nums.slice(0, 6) : nums.slice(0, -1); 
        const drawNumStr = String(drawNumber);
 
        if (processedDraws.has(drawNumStr)) continue;
@@ -257,7 +240,7 @@ async function syncLotteryData(env: any, lottery: any): Promise<number> {
 
        batch.push(stmt.bind(lottery.id, drawNumStr, openTime, JSON.stringify(normalNums), special, Date.now()));
        count++;
-       if (batch.length >= 50) break;
+       if (batch.length >= 100) break; // 稍微增加单次同步数量
     }
 
     if (batch.length > 0) {
@@ -286,11 +269,9 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
 
     if (historyData.length === 0) throw new Error("暂无历史数据，请先同步");
 
-    // 计算下一期期号
     let nextDrawNumber = "Unknown";
     try {
         const lastDraw = historyData[0].drawNumber;
-        // 尝试解析纯数字期号进行+1，否则加后缀
         const numVal = parseInt(lastDraw);
         if (!isNaN(numVal) && String(numVal) === String(lastDraw)) {
              nextDrawNumber = String(BigInt(lastDraw) + 1n);
@@ -301,12 +282,10 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
         nextDrawNumber = `${historyData[0].drawNumber}_Next`;
     }
 
-    // 调用完善后的算法
     const prediction = generateDeterministicPrediction(historyData);
     const jsonPrediction = JSON.stringify(prediction);
     const now = Date.now();
 
-    // 存入数据库
     await env.DB.prepare(`
         INSERT OR REPLACE INTO admin_predictions (lottery_id, data, updated_at)
         VALUES (?, ?, ?)
@@ -317,21 +296,19 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
         VALUES (?, ?, ?, ?)
     `).bind(lotteryId, nextDrawNumber, jsonPrediction, now).run();
 
-    // 格式化消息
     const msg = `✅ <b>[${lotteryName}] 第 ${nextDrawNumber} 期 预测</b>\n` +
                 `------------------------------\n` +
-                `🐯 <b>六肖</b>: ${prediction.zodiacs.join(' ')}\n` +
-                `⭐ <b>8码</b>: ${prediction.numbers_8.join(',')}\n` +
-                `🎱 <b>18码</b>: ${prediction.numbers_18.join(',')}\n` +
+                `🐯 <b>六肖</b>: ${prediction.zodiacs.length > 0 ? prediction.zodiacs.join(' ') : '分析中...'}\n` +
+                `⭐ <b>8码</b>: ${prediction.numbers_8.length > 0 ? prediction.numbers_8.join(',') : '分析中...'}\n` +
+                `🎱 <b>18码</b>: ${prediction.numbers_18.length > 0 ? prediction.numbers_18.join(',') : '分析中...'}\n` +
                 `🔢 <b>头数</b>: ${prediction.heads.join(', ')}头\n` +
                 `🔚 <b>尾数</b>: ${prediction.tails.join(', ')}尾\n` +
                 `🎨 <b>波色</b>: ${prediction.colors.map((c: string) => c==='red'?'红':c==='blue'?'蓝':'绿').join(' ')}\n` +
-                `🔥 <b>信心</b>: ${prediction.confidence}%`;
+                `🔥 <b>信心</b>: ${prediction.confidence}%` + 
+                (historyData.length < 15 ? `\n\n⚠️ <i>注：当前历史数据仅 ${historyData.length} 期，预测仅供极小范围参考。</i>` : '');
 
     return { message: msg, prediction };
 }
-
-// --- Telegram API Helpers ---
 
 async function sendMessage(token: string, chatId: number | string, text: string, options: any = {}) {
   if(!token) return;

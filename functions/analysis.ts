@@ -33,7 +33,7 @@ class AdvancedAnalytics {
     omissions: Record<number, number> = {};
     // P(特码 | 上期特码)
     spTransitions: Record<number, Record<number, number>> = {};
-    // P(特码 | 本期平码) - 核心增强：平特关联
+    // P(特码 | 本期平码)
     normalToSpecial: Record<number, Record<number, number>> = {};
 
     constructor(history: any[]) {
@@ -45,7 +45,7 @@ class AdvancedAnalytics {
         for (let i = 1; i <= 49; i++) {
             this.weightedFreq[i] = 0;
             const idx = this.history.findIndex(d => parseInt(d.specialNumber) === i);
-            this.omissions[i] = idx === -1 ? this.history.length : idx;
+            this.omissions[i] = idx === -1 ? Math.max(this.history.length, 50) : idx;
         }
 
         this.history.forEach((draw, index) => {
@@ -76,17 +76,18 @@ class AdvancedAnalytics {
         });
     }
 
-    // 模式识别：查找最近3期生肖序列在历史中的共振
     getPatternScore(candidate: number): number {
-        if (this.history.length < 10) return 0;
-        const recentZods = this.history.slice(0, 3).map(d => getZodiacForNumber(parseInt(d.specialNumber)));
+        if (this.history.length < 5) return 0; // 降低模式匹配门槛
+        const lookback = Math.min(3, this.history.length);
+        const recentZods = this.history.slice(0, lookback).map(d => getZodiacForNumber(parseInt(d.specialNumber)));
         const candidateZod = getZodiacForNumber(candidate);
         let score = 0;
-        for (let i = 1; i < this.history.length - 4; i++) {
-            const pastZods = this.history.slice(i, i + 3).map(d => getZodiacForNumber(parseInt(d.specialNumber)));
+        
+        for (let i = 1; i < this.history.length - lookback; i++) {
+            const pastZods = this.history.slice(i, i + lookback).map(d => getZodiacForNumber(parseInt(d.specialNumber)));
             if (JSON.stringify(recentZods) === JSON.stringify(pastZods)) {
                 if (getZodiacForNumber(parseInt(this.history[i - 1].specialNumber)) === candidateZod) {
-                    score += 10; 
+                    score += 15; 
                 }
             }
         }
@@ -95,78 +96,61 @@ class AdvancedAnalytics {
 }
 
 export function generateDeterministicPrediction(history: any[]) {
-    if (!history || history.length < 15) {
-        return { zodiacs:[], numbers_18:[], numbers_8:[], heads:[], tails:[], colors:[], reasoning:"", confidence:0 };
+    // 将门槛降低到 1，只要有一期数据就能预测
+    if (!history || history.length < 1) {
+        return { zodiacs:[], numbers_18:[], numbers_8:[], heads:[], tails:[], colors:[], reasoning:"数据量不足，请同步数据", confidence:0 };
     }
 
     const engine = new AdvancedAnalytics(history);
     const lastDraw = history[0];
     const lastSP = parseInt(lastDraw.specialNumber);
 
-    // 动态策略库
     const strategies: StrategyWeights[] = [
         { FREQUENCY: 2.2, OMISSION: 0.3, TRANSITION: 1.8, PATTERN: 1.2, SYNERGY: 1.5, description: "趋势热点跟踪" },
         { FREQUENCY: 0.8, OMISSION: 2.5, TRANSITION: 0.5, PATTERN: 0.5, SYNERGY: 1.1, description: "冷门遗漏回补" },
         { FREQUENCY: 1.2, OMISSION: 0.5, TRANSITION: 2.5, PATTERN: 2.2, SYNERGY: 1.8, description: "历史规律挖掘" }
     ];
 
-    // 执行回测寻找当前最佳策略
     const bestStrategy = backtestBestStrategy(history, strategies);
 
     const numberScores: Record<number, number> = {};
     for (let n = 1; n <= 49; n++) {
         let score = 0;
-
-        // A. 基础加权频率
         score += engine.weightedFreq[n] * 15 * bestStrategy.FREQUENCY;
-
-        // B. 遗漏值非线性补偿
         const oms = engine.omissions[n];
-        if (oms > 20) score += Math.pow(oms - 18, 1.5) * bestStrategy.OMISSION;
+        if (oms > 15) score += Math.pow(oms - 10, 1.2) * bestStrategy.OMISSION;
 
-        // C. 关联性得分 (特特转移 + 平特联动)
         if (!isNaN(lastSP)) {
             const spTrans = engine.spTransitions[lastSP]?.[n] || 0;
             score += spTrans * 30 * bestStrategy.TRANSITION;
-            
-            // 平特联动得分：如果上期开出的平码在历史中常带出号码 n
-            lastDraw.numbers.forEach((num: number) => {
-                const linkScore = engine.normalToSpecial[num]?.[n] || 0;
-                score += linkScore * 10 * bestStrategy.TRANSITION;
-            });
+            if (lastDraw.numbers) {
+                lastDraw.numbers.forEach((num: number) => {
+                    const linkScore = engine.normalToSpecial[num]?.[n] || 0;
+                    score += linkScore * 10 * bestStrategy.TRANSITION;
+                });
+            }
         }
 
-        // D. 模式识别
         score += engine.getPatternScore(n) * bestStrategy.PATTERN;
-
-        // E. 属性共振系数 (Synergy)
-        const zH = (engine.weightedFreq[n] > 0.5) ? 1.3 : 1.0;
-        const cH = 1.0; // 预留
-        score *= (zH * cH * bestStrategy.SYNERGY);
-
+        const zH = (engine.weightedFreq[n] > 0.3) ? 1.2 : 1.0;
+        score *= (zH * bestStrategy.SYNERGY);
         numberScores[n] = score;
     }
 
     const sorted = Object.entries(numberScores).sort(([,a],[,b]) => b-a).map(([n]) => parseInt(n));
-    
-    // 强制加入 3 个长期未开的冷码进行对冲
-    const topHot = sorted.slice(0, 15);
-    const coldGuard = sorted.filter(n => engine.omissions[n] > 40).slice(0, 3);
-    const numbers_18 = Array.from(new Set([...topHot, ...coldGuard])).slice(0, 18).sort((a,b)=>a-b);
-    
-    // 回测推荐8码 (直接取得分最高的8个)
+    const numbers_18 = sorted.slice(0, 18).sort((a,b)=>a-b);
     const numbers_8 = sorted.slice(0, 8).sort((a,b)=>a-b);
 
     const zodiacRank = ZODIACS.map(z => {
-        const score = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49]
+        const score = Array.from({length: 49}, (_, i) => i + 1)
             .filter(num => getZodiacForNumber(num) === z)
             .reduce((sum, num) => sum + (numberScores[num] || 0), 0);
         return { z, score };
     }).sort((a,b) => b.score - a.score);
 
     const colors = ['red', 'blue', 'green'].sort((a, b) => {
-        const sa = sorted.slice(0, 12).filter(n => getColorForNumber(n) === a).length;
-        const sb = sorted.slice(0, 12).filter(n => getColorForNumber(n) === b).length;
+        const sa = sorted.slice(0, 10).filter(n => getColorForNumber(n) === a).length;
+        const sb = sorted.slice(0, 10).filter(n => getColorForNumber(n) === b).length;
         return sb - sa;
     }).slice(0, 2);
 
@@ -185,29 +169,34 @@ export function generateDeterministicPrediction(history: any[]) {
             return sb - sa;
         }).slice(0, 4).sort(),
         colors,
-        reasoning: `【${bestStrategy.description}】`, // 仅保留模式名称
-        confidence: 88
+        reasoning: history.length < 10 ? `【样本不足】${bestStrategy.description}(参考)` : `【${bestStrategy.description}】`,
+        confidence: Math.min(88, 50 + history.length * 2) // 信心值随数据量动态调整
     };
 }
 
 function backtestBestStrategy(history: any[], strategies: StrategyWeights[]): StrategyWeights {
-    const testSize = Math.min(10, history.length - 12);
+    // 修正 testSize 计算，防止出现负数
+    const testSize = Math.max(1, Math.min(5, history.length - 2)); 
     let bestIdx = 0;
     let minRankSum = Infinity;
+
+    if (history.length < 3) return strategies[0];
 
     strategies.forEach((strat, idx) => {
         let rankSum = 0;
         for (let i = 0; i < testSize; i++) {
             const actual = parseInt(history[i].specialNumber);
             const subHistory = history.slice(i + 1);
+            if (subHistory.length === 0) continue;
+
             const engine = new AdvancedAnalytics(subHistory);
             const last = parseInt(subHistory[0].specialNumber);
             
             const scores: Record<number, number> = {};
             for (let n = 1; n <= 49; n++) {
                 let s = engine.weightedFreq[n] * strat.FREQUENCY;
-                if (engine.omissions[n] > 20) s += (engine.omissions[n]-20) * strat.OMISSION * 5;
-                if (engine.spTransitions[last]?.[n]) s += engine.spTransitions[last][n] * strat.TRANSITION * 10;
+                if (engine.omissions[n] > 20) s += (engine.omissions[n]-20) * strat.OMISSION;
+                if (engine.spTransitions[last]?.[n]) s += engine.spTransitions[last][n] * strat.TRANSITION * 5;
                 scores[n] = s;
             }
             const sorted = Object.entries(scores).sort(([,a],[,b]) => b-a).map(([n]) => parseInt(n));
