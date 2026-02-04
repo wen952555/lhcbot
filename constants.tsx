@@ -1,5 +1,5 @@
 
-import { LotteryConfig } from './types';
+import { LotteryConfig } from './types.ts';
 
 export const LOTTERY_CONFIGS: LotteryConfig[] = [
   { 

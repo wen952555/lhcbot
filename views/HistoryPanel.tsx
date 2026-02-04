@@ -1,9 +1,9 @@
 
 import React from 'react';
 import { History } from 'lucide-react';
-import { DrawResult } from '../types';
-import Ball from '../components/Ball';
-import { NUMBER_MAP, COLOR_NAMES } from '../constants';
+import { DrawResult } from '../types.ts';
+import Ball from '../components/Ball.tsx';
+import { NUMBER_MAP, COLOR_NAMES } from '../constants.tsx';
 
 interface HistoryPanelProps {
   history: DrawResult[];
@@ -47,7 +47,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ history, lotteryName
                         <Ball number={draw.specialNumber} size="sm" isSpecial />
                         <div className="flex flex-col text-[10px]">
                           <span className="text-slate-300 font-bold">{spInfo?.zodiac}</span>
-                          <span className={spInfo?.color ? (COLOR_NAMES[spInfo.color] ? (spInfo.color === 'red' ? 'text-red-400' : spInfo.color === 'blue' ? 'text-blue-400' : 'text-emerald-400') : '') : ''}>
+                          <span className={spInfo?.color ? (spInfo.color === 'red' ? 'text-red-400' : spInfo.color === 'blue' ? 'text-blue-400' : 'text-emerald-400') : ''}>
                              {spInfo?.color ? COLOR_NAMES[spInfo.color] : ''}
                           </span>
                         </div>

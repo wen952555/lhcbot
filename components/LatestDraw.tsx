@@ -1,6 +1,7 @@
+
 import React from 'react';
-import { DrawResult } from '../types';
-import Ball from './Ball';
+import { DrawResult } from '../types.ts';
+import Ball from './Ball.tsx';
 
 interface LatestDrawProps {
   draw: DrawResult | null;

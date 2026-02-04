@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { LotteryConfig } from '../types';
+import { LotteryConfig } from '../types.ts';
 
 interface LotteryTabsProps {
   configs: LotteryConfig[];

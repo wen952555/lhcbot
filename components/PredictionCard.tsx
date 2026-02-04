@@ -1,7 +1,8 @@
+
 import React from 'react';
 import { Sparkles, BrainCircuit } from 'lucide-react';
-import { PredictionResult } from '../types';
-import Ball from './Ball';
+import { PredictionResult } from '../types.ts';
+import Ball from './Ball.tsx';
 
 interface PredictionCardProps {
   prediction: PredictionResult | null;
@@ -38,7 +39,6 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, isLo
         <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="flex flex-col items-center gap-2 mb-6 bg-slate-900/40 p-3 rounded-xl">
             <div className="flex flex-wrap justify-center gap-2">
-              {/* Show first 6 numbers from the 18 recommended numbers as a preview */}
               {prediction.numbers_18.slice(0, 6).map((num, idx) => (
                 <Ball key={idx} number={num} size="md" />
               ))}
