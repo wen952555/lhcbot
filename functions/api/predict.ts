@@ -5,14 +5,14 @@ export async function onRequestPost(context: any) {
   try {
     const { lotteryId } = await request.json();
     
-    // --- Fetch Latest History for Display ---
+    // --- 获取更多历史数据以支持算法回测 ---
     let historyData: any[] = [];
     if (env.DB) {
         const { results } = await env.DB.prepare(`
             SELECT * FROM lottery_draws 
             WHERE lottery_id = ? 
             ORDER BY draw_number DESC 
-            LIMIT 30
+            LIMIT 100
         `).bind(lotteryId).all();
         
         historyData = results.map((row: any) => ({
@@ -23,7 +23,7 @@ export async function onRequestPost(context: any) {
         }));
     }
 
-    // --- Fetch Latest/Current Prediction ---
+    // --- 获取最新预测 ---
     let prediction = null;
     if (env.DB) {
         const predRow = await env.DB.prepare(`
@@ -36,7 +36,7 @@ export async function onRequestPost(context: any) {
         }
     }
 
-    // --- Fetch Prediction History (for Win/Loss Record) ---
+    // --- 获取预测历史记录 ---
     let predictionHistory: any[] = [];
     if (env.DB) {
         const { results } = await env.DB.prepare(`
@@ -44,7 +44,7 @@ export async function onRequestPost(context: any) {
             FROM prediction_history 
             WHERE lottery_id = ? 
             ORDER BY draw_number DESC 
-            LIMIT 20
+            LIMIT 30
         `).bind(lotteryId).all();
 
         predictionHistory = results.map((row: any) => ({
