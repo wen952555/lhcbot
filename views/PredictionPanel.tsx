@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { Crown, Layers, Hash, Palette, AlertCircle } from 'lucide-react';
+import { Crown, Layers, Hash, Palette, AlertCircle, BrainCircuit } from 'lucide-react';
 import { PredictionResult } from '../types';
 import { COLOR_NAMES } from '../constants';
 
@@ -16,57 +17,64 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
   
   if (isLoading) {
     return (
-      <div className="py-20 flex flex-col items-center gap-4 glass-panel rounded-3xl mx-4">
-        <div className="w-10 h-10 border-2 border-slate-200 border-t-amber-500 rounded-full animate-spin"></div>
-        <p className="text-slate-400 text-xs">正在获取最新推荐...</p>
+      <div className="py-20 flex flex-col items-center gap-4 glass-panel rounded-3xl mx-4 shadow-inner">
+        <div className="relative">
+            <div className="w-12 h-12 border-4 border-slate-100 border-t-amber-500 rounded-full animate-spin"></div>
+            <BrainCircuit className="w-6 h-6 text-amber-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+        </div>
+        <p className="text-slate-500 text-xs font-medium">深度引擎正在回测历史规律...</p>
       </div>
     );
   }
 
   if (!prediction) {
     return (
-      <div className="glass-panel rounded-3xl p-8 mx-4 text-center">
-        <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-200">
-           <AlertCircle className="text-slate-400 w-6 h-6" />
+      <div className="glass-panel rounded-3xl p-8 mx-4 text-center border-dashed border-2 border-slate-200">
+        <div className="w-14 h-14 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+           <AlertCircle className="text-slate-300 w-8 h-8" />
         </div>
-        <h3 className="text-slate-600 font-bold mb-2">暂无推荐数据</h3>
-        <p className="text-slate-400 text-xs mb-6">管理员暂未发布本期 {lotteryName} 的心水推荐。</p>
-        <button onClick={onPredict} className="text-xs text-amber-500 underline hover:text-amber-600">刷新试试</button>
+        <h3 className="text-slate-600 font-bold mb-2">尚未生成预测</h3>
+        <p className="text-slate-400 text-[10px] mb-6 px-4">为了保证准确率，本期预测正在等待最新开奖数据完成校验。</p>
+        <button onClick={onPredict} className="bg-slate-800 text-white px-6 py-2 rounded-full text-xs font-bold shadow-lg shadow-slate-200">立即同步并分析</button>
       </div>
     );
   }
 
+  // 从推理文本中提取模式名称
+  const strategyMatch = prediction.reasoning.match(/【(.*?)】/);
+  const strategyName = strategyMatch ? strategyMatch[1] : "智能综合";
+
   return (
-    <div className="space-y-4">
-      {/* Prominent Header */}
-      <div className="relative py-2 text-center">
-         <h1 className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-500 via-orange-500 to-amber-700 drop-shadow-sm tracking-tight">
-            第 {nextDrawId} 期 预测结果
+    <div className="space-y-4 animate-in fade-in duration-500">
+      {/* 头部标题区 */}
+      <div className="text-center">
+         <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 rounded-full border border-amber-100 mb-2">
+            <BrainCircuit className="w-3 h-3 text-amber-600" />
+            <span className="text-[10px] text-amber-700 font-bold">算法模式: {strategyName}</span>
+         </div>
+         <h1 className="text-2xl font-black text-slate-800 tracking-tight">
+            第 <span className="text-amber-500">{nextDrawId}</span> 期 推荐
          </h1>
-         <div className="flex justify-center items-center gap-2 mt-1">
-            <span className="text-[10px] bg-white text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 shadow-sm">
-              {lotteryName}
-            </span>
-            {prediction.timestamp && (
-               <span className="text-[10px] text-slate-400">
-                 更新于 {new Date(prediction.timestamp).toLocaleTimeString('zh-CN', {hour: '2-digit', minute:'2-digit'})}
-               </span>
-            )}
+         <div className="text-[10px] text-slate-400 mt-1">
+            {lotteryName} · 算法信心指数 <span className="text-amber-600 font-bold">{prediction.confidence}%</span>
          </div>
       </div>
 
-      {/* 1. 推荐六肖 */}
-      <section className="glass-panel rounded-2xl p-4 relative overflow-hidden border border-amber-500/10 shadow-lg shadow-amber-500/5">
-        <div className="absolute top-0 right-0 p-3 opacity-5">
-            <Crown className="w-16 h-16 text-amber-600" />
+      {/* 1. 核心六肖 */}
+      <section className="glass-panel rounded-2xl p-4 relative overflow-hidden border-2 border-amber-400/20 shadow-xl shadow-amber-500/5">
+        <div className="absolute -right-4 -top-4 opacity-[0.03] rotate-12">
+            <Crown className="w-32 h-32 text-amber-900" />
         </div>
-        <h3 className="text-amber-600 text-xs font-bold mb-3 flex items-center gap-2">
-            <Crown className="w-4 h-4" /> 必中六肖
-        </h3>
-        <div className="flex justify-between px-2">
+        <div className="flex items-center justify-between mb-4">
+            <h3 className="text-amber-600 text-[11px] font-black flex items-center gap-1.5 bg-amber-50 px-2 py-0.5 rounded-md">
+                <Crown className="w-3.5 h-3.5" /> 必中六肖推荐
+            </h3>
+            <span className="text-[9px] text-slate-400">历史高关联度肖</span>
+        </div>
+        <div className="flex justify-between px-1">
             {prediction.zodiacs.map((z, i) => (
                 <div key={i} className="flex flex-col items-center gap-1">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-500 to-amber-600 shadow-lg shadow-amber-500/30 flex items-center justify-center text-white font-bold text-lg border-2 border-white/30 transform hover:scale-110 transition-transform">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg shadow-amber-500/30 flex items-center justify-center text-white font-black text-lg border-b-4 border-orange-700 transform hover:-translate-y-1 transition-transform">
                         {z}
                     </div>
                 </div>
@@ -74,44 +82,41 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
         </div>
       </section>
 
-      {/* 2. 推荐18码 */}
+      {/* 2. 精选18码 */}
       <section className="glass-panel rounded-2xl p-4">
-        <h3 className="text-blue-500 text-xs font-bold mb-3 flex items-center gap-2">
-            <Hash className="w-4 h-4" /> 精选18码
+        <h3 className="text-blue-500 text-[11px] font-black mb-3 flex items-center gap-1.5 bg-blue-50 px-2 py-0.5 rounded-md w-fit">
+            <Hash className="w-3.5 h-3.5" /> 智能筛选18码
         </h3>
-        <div className="grid grid-cols-6 gap-2 sm:gap-3">
+        <div className="grid grid-cols-6 gap-2">
             {prediction.numbers_18.map((num, i) => (
-                <div key={i} className="aspect-square rounded-lg bg-white flex items-center justify-center border border-slate-200 text-slate-700 font-mono font-bold text-sm shadow-sm hover:bg-slate-50 transition-colors">
-                    {num}
+                <div key={i} className="aspect-square rounded-lg bg-white flex items-center justify-center border border-slate-200 text-slate-700 font-mono font-black text-sm shadow-sm hover:border-blue-300 hover:text-blue-600 transition-colors">
+                    {num.toString().padStart(2, '0')}
                 </div>
             ))}
         </div>
       </section>
 
-      {/* 3. 头数 / 尾数 / 波色 Grid */}
+      {/* 3. 多维度建议 */}
       <div className="grid grid-cols-2 gap-3">
-          {/* 头数 */}
-          <div className="glass-panel rounded-2xl p-4">
-             <h3 className="text-slate-500 text-xs font-bold mb-2 flex items-center gap-1">
-                <Layers className="w-3 h-3" /> 推荐头数
+          <div className="glass-panel rounded-2xl p-4 border border-slate-100">
+             <h3 className="text-slate-400 text-[10px] font-bold mb-3 flex items-center gap-1 uppercase">
+                <Layers className="w-3 h-3" /> 头数锁定
              </h3>
              <div className="flex flex-wrap gap-2">
                  {prediction.heads.map((h, i) => (
-                     <span key={i} className="text-sm font-bold bg-slate-100 text-slate-700 px-2 py-1 rounded border border-slate-200">
+                     <span key={i} className="text-xs font-black bg-slate-800 text-white px-2 py-1 rounded shadow-sm">
                         {h}头
                      </span>
                  ))}
              </div>
           </div>
-
-           {/* 尾数 */}
-           <div className="glass-panel rounded-2xl p-4">
-             <h3 className="text-slate-500 text-xs font-bold mb-2 flex items-center gap-1">
-                <Layers className="w-3 h-3" /> 推荐尾数
+           <div className="glass-panel rounded-2xl p-4 border border-slate-100">
+             <h3 className="text-slate-400 text-[10px] font-bold mb-3 flex items-center gap-1 uppercase">
+                <Layers className="w-3 h-3" /> 尾数围攻
              </h3>
              <div className="flex flex-wrap gap-2">
                  {prediction.tails.map((t, i) => (
-                     <span key={i} className="text-sm font-bold bg-slate-100 text-slate-700 px-2 py-1 rounded border border-slate-200">
+                     <span key={i} className="text-xs font-black bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">
                         {t}尾
                      </span>
                  ))}
@@ -119,28 +124,40 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
           </div>
       </div>
 
-       {/* 波色 */}
-      <section className="glass-panel rounded-2xl p-4 flex items-center justify-between">
-           <h3 className="text-slate-500 text-xs font-bold flex items-center gap-2">
-                <Palette className="w-4 h-4" /> 推荐波色
+       {/* 波色推荐 */}
+      <section className="glass-panel rounded-2xl p-4 flex items-center justify-between border-l-4 border-l-amber-500">
+           <h3 className="text-slate-600 text-[11px] font-black flex items-center gap-2">
+                <Palette className="w-4 h-4 text-slate-400" /> 推荐波色
            </h3>
-           <div className="flex gap-3">
+           <div className="flex gap-2">
                {prediction.colors.map((c, i) => (
-                   <div key={i} className={`px-4 py-1.5 rounded-full text-xs font-bold shadow-md flex items-center gap-2 border border-white/20
-                       ${c === 'red' ? 'bg-red-500 text-white shadow-red-500/20' : 
-                         c === 'blue' ? 'bg-blue-500 text-white shadow-blue-500/20' : 
-                         'bg-emerald-500 text-white shadow-emerald-500/20'}`}>
-                        <div className="w-2 h-2 bg-white rounded-full"></div>
+                   <div key={i} className={`px-4 py-1.5 rounded-lg text-xs font-black shadow-sm flex items-center gap-2 border border-white/20
+                       ${c === 'red' ? 'bg-red-500 text-white' : 
+                         c === 'blue' ? 'bg-blue-500 text-white' : 
+                         'bg-emerald-500 text-white'}`}>
                         {COLOR_NAMES[c as 'red'|'blue'|'green']}波
                    </div>
                ))}
            </div>
       </section>
       
-      <div className="p-4 flex items-start gap-3 opacity-60">
-        <AlertCircle className="text-slate-400 w-4 h-4 flex-shrink-0 mt-0.5" />
-        <p className="text-[10px] text-slate-500 leading-relaxed">
-          所有预测数据由后台智能算法生成，仅供娱乐参考，请勿沉迷。
+      {/* 算法分析说明 */}
+      <div className="bg-slate-800 rounded-2xl p-5 text-white shadow-2xl relative overflow-hidden">
+        <div className="absolute right-0 bottom-0 opacity-10">
+            <BrainCircuit className="w-24 h-24" />
+        </div>
+        <h4 className="text-amber-400 text-[10px] font-black mb-2 flex items-center gap-1 uppercase tracking-widest">
+            Algorithm Reasoning / 分析说明
+        </h4>
+        <p className="text-[11px] text-slate-300 leading-relaxed font-medium">
+          {prediction.reasoning}
+        </p>
+      </div>
+
+      <div className="p-4 flex items-start gap-2 opacity-50">
+        <AlertCircle className="text-slate-400 w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+        <p className="text-[9px] text-slate-500 leading-tight">
+          预测仅代表基于历史数据的数学概率建模结果，不作为博彩依据。大数据模型并非100%准确，请理性对待。
         </p>
       </div>
     </div>

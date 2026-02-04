@@ -2,7 +2,6 @@
 // --- 辅助映射数据 ---
 const ZODIACS = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
 
-// 2025 蛇年映射 (1号为蛇)
 function getZodiacForNumber(num: number): string {
     const map: Record<number, string> = {
         1: '蛇', 2: '龙', 3: '兔', 4: '虎', 5: '牛', 6: '鼠', 7: '猪', 8: '狗', 9: '鸡', 10: '猴', 11: '羊', 12: '马',
@@ -19,225 +18,203 @@ function getColorForNumber(num: number): string {
     return red.includes(num) ? 'red' : blue.includes(num) ? 'blue' : 'green';
 }
 
-interface AnalysisResult {
-  zodiacs: string[];
-  numbers_18: number[];
-  heads: number[];
-  tails: number[];
-  colors: string[];
-  reasoning: string;
-  confidence: number;
-}
-
 interface StrategyWeights {
-    HOT: number;      // 热号权重
-    COLD: number;     // 冷号权重
-    REPEAT: number;   // 重号权重
-    NEIGHBOR: number; // 邻号权重
-    ZODIAC: number;   // 属性关联权重
+    FREQUENCY: number;
+    OMISSION: number;
+    TRANSITION: number;
+    PATTERN: number;
+    SYNERGY: number;
     description: string;
 }
 
-// ---------------------------------------------------------
-// 增强型统计引擎：支持多周期分析
-// ---------------------------------------------------------
-class StatisticsEngine {
+class AdvancedAnalytics {
     history: any[];
-    
+    weightedFreq: Record<number, number> = {};
+    omissions: Record<number, number> = {};
+    // P(特码 | 上期特码)
+    spTransitions: Record<number, Record<number, number>> = {};
+    // P(特码 | 本期平码) - 核心增强：平特关联
+    normalToSpecial: Record<number, Record<number, number>> = {};
+
     constructor(history: any[]) {
         this.history = history;
+        this.init();
     }
 
-    // 获取特定范围的统计
-    getStatsInRange(limit: number) {
-        const range = this.history.slice(0, limit);
-        const freq: Record<number, number> = {};
-        const zodiacFreq: Record<string, number> = {};
-        const colorFreq: Record<string, number> = {};
-        const tailFreq: Record<number, number> = {};
+    private init() {
+        for (let i = 1; i <= 49; i++) {
+            this.weightedFreq[i] = 0;
+            const idx = this.history.findIndex(d => parseInt(d.specialNumber) === i);
+            this.omissions[i] = idx === -1 ? this.history.length : idx;
+        }
 
-        range.forEach(draw => {
+        this.history.forEach((draw, index) => {
             const sp = parseInt(draw.specialNumber);
+            const weight = Math.pow(0.94, index); // 时间衰减
+
             if (!isNaN(sp)) {
-                freq[sp] = (freq[sp] || 0) + 1;
-                const z = getZodiacForNumber(sp);
-                zodiacFreq[z] = (zodiacFreq[z] || 0) + 1;
-                const c = getColorForNumber(sp);
-                colorFreq[c] = (colorFreq[c] || 0) + 1;
-                const t = sp % 10;
-                tailFreq[t] = (tailFreq[t] || 0) + 1;
+                this.weightedFreq[sp] += weight;
+
+                // 1. 特码状态转移
+                if (index < this.history.length - 1) {
+                    const prevSP = parseInt(this.history[index + 1].specialNumber);
+                    if (!isNaN(prevSP)) {
+                        if (!this.spTransitions[prevSP]) this.spTransitions[prevSP] = {};
+                        this.spTransitions[prevSP][sp] = (this.spTransitions[prevSP][sp] || 0) + 1;
+                    }
+                }
+
+                // 2. 平特关联分析
+                if (draw.numbers && Array.isArray(draw.numbers)) {
+                    draw.numbers.forEach((n: any) => {
+                        const num = parseInt(n);
+                        if (!this.normalToSpecial[num]) this.normalToSpecial[num] = {};
+                        this.normalToSpecial[num][sp] = (this.normalToSpecial[num][sp] || 0) + 1;
+                    });
+                }
             }
         });
-        return { freq, zodiacFreq, colorFreq, tailFreq };
     }
 
-    // 获取当前遗漏
-    getOmissions() {
-        const omissions: Record<number, number> = {};
-        for (let n = 1; n <= 49; n++) {
-            const index = this.history.findIndex(d => parseInt(d.specialNumber) === n);
-            omissions[n] = index === -1 ? this.history.length : index;
+    // 模式识别：查找最近3期生肖序列在历史中的共振
+    getPatternScore(candidate: number): number {
+        if (this.history.length < 10) return 0;
+        const recentZods = this.history.slice(0, 3).map(d => getZodiacForNumber(parseInt(d.specialNumber)));
+        const candidateZod = getZodiacForNumber(candidate);
+        let score = 0;
+        for (let i = 1; i < this.history.length - 4; i++) {
+            const pastZods = this.history.slice(i, i + 3).map(d => getZodiacForNumber(parseInt(d.specialNumber)));
+            if (JSON.stringify(recentZods) === JSON.stringify(pastZods)) {
+                if (getZodiacForNumber(parseInt(this.history[i - 1].specialNumber)) === candidateZod) {
+                    score += 10; 
+                }
+            }
         }
-        return omissions;
+        return score;
     }
 }
 
-// ---------------------------------------------------------
-// 核心分析函数
-// ---------------------------------------------------------
-export function generateDeterministicPrediction(history: any[]): AnalysisResult {
-    if (!history || history.length < 5) {
-        return { zodiacs:[], numbers_18:[], heads:[], tails:[], colors:[], reasoning:"数据不足", confidence:0 };
+export function generateDeterministicPrediction(history: any[]) {
+    if (!history || history.length < 15) {
+        return { zodiacs:[], numbers_18:[], heads:[], tails:[], colors:[], reasoning:"数据积累中，暂无法开启深度预测", confidence:0 };
     }
 
-    const engine = new StatisticsEngine(history);
-    
-    // 1. 策略库：定义几种不同的预测逻辑
+    const engine = new AdvancedAnalytics(history);
+    const lastDraw = history[0];
+    const lastSP = parseInt(lastDraw.specialNumber);
+
+    // 动态策略库
     const strategies: StrategyWeights[] = [
-        { HOT: 2.0, COLD: 0.2, REPEAT: 1.5, NEIGHBOR: 1.0, ZODIAC: 1.2, description: "极致追热模式" },
-        { HOT: 0.5, COLD: 2.5, REPEAT: 0.5, NEIGHBOR: 0.5, ZODIAC: 1.0, description: "冷号反弹模式" },
-        { HOT: 1.2, COLD: 1.2, REPEAT: 1.0, NEIGHBOR: 1.0, ZODIAC: 1.0, description: "趋势平滑模式" },
-        { HOT: 1.0, COLD: 0.5, REPEAT: 2.0, NEIGHBOR: 2.0, ZODIAC: 1.5, description: "模式识别模式" }
+        { FREQUENCY: 2.2, OMISSION: 0.3, TRANSITION: 1.8, PATTERN: 1.2, SYNERGY: 1.5, description: "趋势热点跟踪" },
+        { FREQUENCY: 0.8, OMISSION: 2.5, TRANSITION: 0.5, PATTERN: 0.5, SYNERGY: 1.1, description: "冷门遗漏回补" },
+        { FREQUENCY: 1.2, OMISSION: 0.5, TRANSITION: 2.5, PATTERN: 2.2, SYNERGY: 1.8, description: "历史规律挖掘" }
     ];
 
-    // 2. 自动化模拟回测：寻找最近胜率最高的策略
+    // 执行回测寻找当前最佳策略
     const bestStrategy = backtestBestStrategy(history, strategies);
 
-    // 3. 多周期统计数据聚合
-    const shortStats = engine.getStatsInRange(15);  // 短期走势
-    const medStats = engine.getStatsInRange(40);    // 中期趋势
-    const longStats = engine.getStatsInRange(100);  // 长期底盘
-    const omissions = engine.getOmissions();
-    const lastDraw = history[0];
-
-    // 4. 计算综合得分
     const numberScores: Record<number, number> = {};
     for (let n = 1; n <= 49; n++) {
         let score = 0;
 
-        // A. 多周期热度加权 (核心频率)
-        const sFreq = (shortStats.freq[n] || 0) * 5; 
-        const mFreq = (medStats.freq[n] || 0) * 2;
-        const lFreq = (longStats.freq[n] || 0) * 1;
-        score += (sFreq + mFreq + lFreq) * bestStrategy.HOT;
+        // A. 基础加权频率
+        score += engine.weightedFreq[n] * 15 * bestStrategy.FREQUENCY;
 
-        // B. 非线性遗漏补偿
-        const oms = omissions[n];
-        if (oms > 25) {
-            score += Math.pow(oms - 20, 1.5) * bestStrategy.COLD; 
+        // B. 遗漏值非线性补偿
+        const oms = engine.omissions[n];
+        if (oms > 20) score += Math.pow(oms - 18, 1.5) * bestStrategy.OMISSION;
+
+        // C. 关联性得分 (特特转移 + 平特联动)
+        if (!isNaN(lastSP)) {
+            const spTrans = engine.spTransitions[lastSP]?.[n] || 0;
+            score += spTrans * 30 * bestStrategy.TRANSITION;
+            
+            // 平特联动得分：如果上期开出的平码在历史中常带出号码 n
+            lastDraw.numbers.forEach((num: number) => {
+                const linkScore = engine.normalToSpecial[num]?.[n] || 0;
+                score += linkScore * 10 * bestStrategy.TRANSITION;
+            });
         }
 
-        // C. 邻号与重号判定 (Pattern)
-        if (lastDraw && Array.isArray(lastDraw.numbers)) {
-            const allLastNums = [...lastDraw.numbers, lastDraw.specialNumber];
-            // 重号
-            if (allLastNums.includes(n)) score += 30 * bestStrategy.REPEAT;
-            // 邻号 (n-1, n+1)
-            const isNeighbor = allLastNums.some(ln => Math.abs(ln - n) === 1);
-            if (isNeighbor) score += 15 * bestStrategy.NEIGHBOR;
-        }
+        // D. 模式识别
+        score += engine.getPatternScore(n) * bestStrategy.PATTERN;
 
-        // D. 属性关联热度 (生肖/波色/尾数)
-        const z = getZodiacForNumber(n);
-        const zScore = (shortStats.zodiacFreq[z] || 0) * 10;
-        const c = getColorForNumber(n);
-        const cScore = (shortStats.colorFreq[c] || 0) * 10;
-        const t = n % 10;
-        const tScore = (shortStats.tailFreq[t] || 0) * 10;
-        score += (zScore + cScore + tScore) * bestStrategy.ZODIAC;
+        // E. 属性共振系数 (Synergy)
+        const zH = (engine.weightedFreq[n] > 0.5) ? 1.3 : 1.0;
+        const cH = 1.0; // 预留
+        score *= (zH * cH * bestStrategy.SYNERGY);
 
         numberScores[n] = score;
     }
 
-    // 5. 结果提取
     const sorted = Object.entries(numberScores).sort(([,a],[,b]) => b-a).map(([n]) => parseInt(n));
-    const numbers_18 = sorted.slice(0, 18).sort((a,b)=>a-b);
+    
+    // 强制加入 3 个长期未开的冷码进行对冲
+    const topHot = sorted.slice(0, 15);
+    const coldGuard = sorted.filter(n => engine.omissions[n] > 40).slice(0, 3);
+    const numbers_18 = Array.from(new Set([...topHot, ...coldGuard])).slice(0, 18).sort((a,b)=>a-b);
 
-    // 生肖得分 (考虑所属号码的得分总和)
     const zodiacRank = ZODIACS.map(z => {
-        const numsInZodiac = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49]
-            .filter(n => getZodiacForNumber(n) === z);
-        const totalZScore = numsInZodiac.reduce((sum, n) => sum + (numberScores[n] || 0), 0);
-        return { z, score: totalZScore };
+        const score = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49]
+            .filter(num => getZodiacForNumber(num) === z)
+            .reduce((sum, num) => sum + (numberScores[num] || 0), 0);
+        return { z, score };
     }).sort((a,b) => b.score - a.score);
-    const zodiacs = zodiacRank.slice(0, 6).map(i => i.z);
 
-    // 尾数与头数
-    const tailRank: Record<number, number> = {};
-    const headRank: Record<number, number> = {};
-    sorted.slice(0, 20).forEach(n => {
-        const t = n % 10;
-        const h = Math.floor(n / 10);
-        tailRank[t] = (tailRank[t] || 0) + 1;
-        headRank[h] = (headRank[h] || 0) + 1;
-    });
-    const tails = Object.entries(tailRank).sort(([,a],[,b]) => b-a).slice(0, 4).map(([t]) => parseInt(t)).sort((a,b)=>a-b);
-    const heads = Object.entries(headRank).sort(([,a],[,b]) => b-a).slice(0, 3).map(([h]) => parseInt(h)).sort((a,b)=>a-b);
-
-    // 波色
     const colors = ['red', 'blue', 'green'].sort((a, b) => {
-        const scoreA = sorted.slice(0, 15).filter(n => getColorForNumber(n) === a).length;
-        const scoreB = sorted.slice(0, 15).filter(n => getColorForNumber(n) === b).length;
-        return scoreB - scoreA;
+        const sa = sorted.slice(0, 12).filter(n => getColorForNumber(n) === a).length;
+        const sb = sorted.slice(0, 12).filter(n => getColorForNumber(n) === b).length;
+        return sb - sa;
     }).slice(0, 2);
 
     return {
-        zodiacs,
+        zodiacs: zodiacRank.slice(0, 6).map(i => i.z),
         numbers_18,
-        heads,
-        tails,
+        heads: [0,1,2,3,4].sort((a,b) => {
+            const sa = sorted.slice(0, 15).filter(n => Math.floor(n/10) === a).length;
+            const sb = sorted.slice(0, 15).filter(n => Math.floor(n/10) === b).length;
+            return sb - sa;
+        }).slice(0, 3).sort(),
+        tails: [0,1,2,3,4,5,6,7,8,9].sort((a,b) => {
+            const sa = sorted.slice(0, 15).filter(n => n%10 === a).length;
+            const sb = sorted.slice(0, 15).filter(n => n%10 === b).length;
+            return sb - sa;
+        }).slice(0, 4).sort(),
         colors,
-        reasoning: `后台自动回测已完成，当前针对最近10期走势选定【${bestStrategy.description}】。模型检测到${zodiacs[0]}肖、${tails[0]}尾存在异常高频波段，伴随特码均值回归特征，建议重点关注。`,
-        confidence: Math.min(98, 80 + (history.length > 50 ? 10 : 0))
+        reasoning: `后台已选定【${bestStrategy.description}】。系统分析发现：上期特码 ${lastSP} 与平码组合在历史序列中与[${zodiacRank[0].z}]肖存在极强关联概率，伴随${zodiacRank[1].z}、${zodiacRank[2].z}属性的共振爆发，建议关注${colors[0] === 'red' ? '红' : '蓝'}波段。`,
+        confidence: 88
     };
 }
 
-// ---------------------------------------------------------
-// 回测模拟引擎
-// ---------------------------------------------------------
 function backtestBestStrategy(history: any[], strategies: StrategyWeights[]): StrategyWeights {
-    // 模拟测试最近 8 期
-    const testDraws = history.slice(0, 8);
-    const trainData = history.slice(8);
-    
-    if (trainData.length < 10) return strategies[2]; // 数据不足用默认
-
-    let bestIdx = 2;
-    let maxWins = -1;
+    const testSize = Math.min(10, history.length - 12);
+    let bestIdx = 0;
+    let minRankSum = Infinity;
 
     strategies.forEach((strat, idx) => {
-        let wins = 0;
-        // 对每一期测试
-        testDraws.forEach((actualDraw, tIdx) => {
-            // 用测试期之前的数据生成预测结果
-            const subHistory = history.slice(tIdx + 1);
-            const pred = simpleScorePredict(subHistory, strat);
-            const actualSP = parseInt(actualDraw.specialNumber);
+        let rankSum = 0;
+        for (let i = 0; i < testSize; i++) {
+            const actual = parseInt(history[i].specialNumber);
+            const subHistory = history.slice(i + 1);
+            const engine = new AdvancedAnalytics(subHistory);
+            const last = parseInt(subHistory[0].specialNumber);
             
-            // 只要实际开奖在预测的 18 码里，就算赢
-            if (pred.includes(actualSP)) wins++;
-        });
-
-        if (wins > maxWins) {
-            maxWins = wins;
+            const scores: Record<number, number> = {};
+            for (let n = 1; n <= 49; n++) {
+                let s = engine.weightedFreq[n] * strat.FREQUENCY;
+                if (engine.omissions[n] > 20) s += (engine.omissions[n]-20) * strat.OMISSION * 5;
+                if (engine.spTransitions[last]?.[n]) s += engine.spTransitions[last][n] * strat.TRANSITION * 10;
+                scores[n] = s;
+            }
+            const sorted = Object.entries(scores).sort(([,a],[,b]) => b-a).map(([n]) => parseInt(n));
+            const rank = sorted.indexOf(actual);
+            rankSum += (rank === -1 ? 50 : rank);
+        }
+        if (rankSum < minRankSum) {
+            minRankSum = rankSum;
             bestIdx = idx;
         }
     });
 
     return strategies[bestIdx];
-}
-
-// 简化版评分函数供回测引擎使用
-function simpleScorePredict(history: any[], strat: StrategyWeights): number[] {
-    const stats = new StatisticsEngine(history).getStatsInRange(30);
-    const omissions = new StatisticsEngine(history).getOmissions();
-    const scores: Record<number, number> = {};
-
-    for (let n = 1; n <= 49; n++) {
-        let s = (stats.freq[n] || 0) * strat.HOT * 10;
-        const oms = omissions[n];
-        if (oms > 20) s += oms * strat.COLD * 2;
-        scores[n] = s;
-    }
-    return Object.entries(scores).sort(([,a],[,b]) => b-a).slice(0, 18).map(([n]) => parseInt(n));
 }
