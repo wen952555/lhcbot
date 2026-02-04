@@ -1,8 +1,8 @@
 
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { DrawResult, NumberFrequency } from '../types';
-import { getNumberColor } from '../constants';
+import { DrawResult, NumberFrequency } from '../types.ts';
+import { getNumberColor } from '../constants.tsx';
 
 interface FrequencyChartProps {
   history: DrawResult[];
@@ -11,9 +11,12 @@ interface FrequencyChartProps {
 const FrequencyChart: React.FC<FrequencyChartProps> = ({ history }) => {
   const calculateFrequency = (): NumberFrequency[] => {
     const counts: Record<number, number> = {};
+    if (!history) return [];
+    
     history.forEach(draw => {
-      [...draw.numbers, draw.specialNumber].forEach(num => {
-        counts[num] = (counts[num] || 0) + 1;
+      const allNums = [...(draw.numbers || []), draw.specialNumber];
+      allNums.forEach(num => {
+        if (num) counts[num] = (counts[num] || 0) + 1;
       });
     });
 
@@ -28,21 +31,21 @@ const FrequencyChart: React.FC<FrequencyChartProps> = ({ history }) => {
     <div className="h-[400px] w-full mt-6">
       <ResponsiveContainer width="100%" height="100%">
         <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
           <XAxis 
             dataKey="number" 
             stroke="#94a3b8" 
-            fontSize={12}
+            fontSize={10}
             tick={{ fill: '#94a3b8' }}
           />
-          <YAxis stroke="#94a3b8" fontSize={12} tick={{ fill: '#94a3b8' }} />
+          <YAxis stroke="#94a3b8" fontSize={10} tick={{ fill: '#94a3b8' }} />
           <Tooltip 
-            contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-            itemStyle={{ color: '#f8fafc' }}
+            contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px' }}
+            itemStyle={{ color: '#1e293b', fontSize: '12px' }}
           />
           <Bar dataKey="count" radius={[4, 4, 0, 0]}>
             {data.map((entry, index) => (
-              <Cell key={`cell-${index}`} className={getNumberColor(entry.number).replace('bg-', 'fill-')} />
+              <Cell key={`cell-${index}`} className={getNumberColor(entry.number)} />
             ))}
           </Bar>
         </BarChart>

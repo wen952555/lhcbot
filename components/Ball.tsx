@@ -1,5 +1,6 @@
+
 import React from 'react';
-import { getNumberColor, NUMBER_MAP } from '../constants';
+import { getNumberColor, NUMBER_MAP } from '../constants.tsx';
 
 interface BallProps {
   number: number;

@@ -1,8 +1,8 @@
 
 import React from 'react';
 import { Trophy, CheckCircle2, XCircle, TrendingUp } from 'lucide-react';
-import { DrawResult, PredictionHistoryItem } from '../types';
-import { NUMBER_MAP } from '../constants';
+import { DrawResult, PredictionHistoryItem } from '../types.ts';
+import { NUMBER_MAP } from '../constants.tsx';
 
 interface PredictionHistoryListProps {
   predictions: PredictionHistoryItem[];
@@ -10,13 +10,12 @@ interface PredictionHistoryListProps {
 }
 
 export const PredictionHistoryList: React.FC<PredictionHistoryListProps> = ({ predictions, drawHistory }) => {
-  if (predictions.length === 0) return (
+  if (!predictions || predictions.length === 0) return (
       <div className="text-center py-8 text-slate-400 text-xs">
           暂无预测记录
       </div>
   );
 
-  // 计算准率 (最近20期)
   const stats = (() => {
       const recent = predictions.slice(0, 20);
       let wins = 0;
@@ -38,7 +37,6 @@ export const PredictionHistoryList: React.FC<PredictionHistoryListProps> = ({ pr
 
   return (
     <div className="pb-8 space-y-4">
-      {/* 胜率统计卡片 */}
       <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-2xl p-4 text-white shadow-xl border border-white/5 flex items-center justify-between">
           <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center border border-amber-500/30">
@@ -73,10 +71,6 @@ export const PredictionHistoryList: React.FC<PredictionHistoryListProps> = ({ pr
 
            return (
             <div key={i} className={`glass-card p-3 rounded-xl flex items-center justify-between relative overflow-hidden transition-all border ${status === 'win' ? 'border-emerald-500/30' : 'border-slate-200'}`}>
-               {status === 'win' && (
-                   <div className="absolute -right-4 -top-4 w-16 h-16 bg-emerald-500/5 rounded-full blur-2xl"></div>
-               )}
-
               <div className="flex flex-col gap-1 w-16 flex-shrink-0 border-r border-slate-200 pr-2">
                 <span className={`font-mono text-xs font-bold ${status === 'win' ? 'text-emerald-600' : 'text-slate-700'}`}>
                     {pred.drawNumber}期

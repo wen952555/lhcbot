@@ -1,31 +1,32 @@
+
 import React from 'react';
-import { DrawResult } from '../types';
-import Ball from './Ball';
-import { NUMBER_MAP } from '../constants';
+import { DrawResult } from '../types.ts';
+import Ball from './Ball.tsx';
+import { NUMBER_MAP } from '../constants.tsx';
 
 interface HistoryListProps {
   history: DrawResult[];
 }
 
 export const HistoryList: React.FC<HistoryListProps> = ({ history }) => {
-  if (history.length <= 1) return (
+  if (!history || history.length <= 1) return (
       <div className="text-center py-8 text-slate-400 text-xs">
           暂无更多历史记录
       </div>
   );
 
-  // Skip the first one as it is shown in LatestDraw
   const pastDraws = history.slice(1);
 
   return (
       <div className="space-y-2 pb-8">
         {pastDraws.map((draw, i) => {
            const spInfo = NUMBER_MAP[draw.specialNumber];
+           const dateStr = draw.date ? draw.date.split(' ')[0] : '--';
            return (
             <div key={i} className="glass-card p-3 rounded-xl flex items-center justify-between">
               <div className="flex flex-col gap-1 w-16 flex-shrink-0">
                 <span className="text-amber-600 font-mono text-xs font-bold">{draw.drawNumber}</span>
-                <span className="text-slate-400 text-[10px]">{draw.date.split(' ')[0]}</span>
+                <span className="text-slate-400 text-[10px]">{dateStr}</span>
               </div>
               
               <div className="flex gap-1">

@@ -1,5 +1,5 @@
 
-import { DrawResult, LotteryConfig, PredictionResult, PredictionHistoryItem } from "./types";
+import { DrawResult, LotteryConfig, PredictionResult, PredictionHistoryItem } from "./types.ts";
 
 export const fetchLotteryHistory = async (config: LotteryConfig): Promise<{ 
   history: DrawResult[], 

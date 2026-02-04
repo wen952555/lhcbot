@@ -1,8 +1,8 @@
 
 import React from 'react';
 import { Crown, Layers, Hash, Palette, AlertCircle, BrainCircuit, Star } from 'lucide-react';
-import { PredictionResult } from '../types';
-import { COLOR_NAMES } from '../constants';
+import { PredictionResult } from '../types.ts';
+import { COLOR_NAMES } from '../constants.tsx';
 
 interface PredictionPanelProps {
   prediction: PredictionResult | null;
@@ -14,7 +14,6 @@ interface PredictionPanelProps {
 }
 
 export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, isLoading, error, onPredict, lotteryName, nextDrawId }) => {
-  
   if (isLoading) {
     return (
       <div className="py-20 flex flex-col items-center gap-4 glass-panel rounded-3xl mx-4 shadow-inner">
@@ -40,13 +39,10 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
     );
   }
 
-  // 从推理文本中提取模式名称
-  const strategyMatch = prediction.reasoning.match(/【(.*?)】/);
-  const strategyName = strategyMatch ? strategyMatch[1] : "智能综合";
+  const strategyName = prediction.reasoning ? (prediction.reasoning.match(/【(.*?)】/)?.[1] || "智能综合") : "智能综合";
 
   return (
     <div className="space-y-4 animate-in fade-in duration-500">
-      {/* 头部标题区 */}
       <div className="text-center">
          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 rounded-full border border-amber-100 mb-2">
             <BrainCircuit className="w-3 h-3 text-amber-600" />
@@ -60,7 +56,6 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
          </div>
       </div>
 
-      {/* 1. 核心六肖 */}
       <section className="glass-panel rounded-2xl p-4 relative overflow-hidden border-2 border-amber-400/20 shadow-xl shadow-amber-500/5">
         <div className="absolute -right-4 -top-4 opacity-[0.03] rotate-12">
             <Crown className="w-32 h-32 text-amber-900" />
@@ -82,7 +77,6 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
         </div>
       </section>
 
-      {/* 2. 回测推荐8码 (New Feature) */}
       <section className="bg-gradient-to-r from-amber-500 to-orange-600 rounded-2xl p-4 shadow-xl shadow-amber-500/20 text-white relative overflow-hidden">
         <div className="absolute top-0 right-0 p-2 opacity-10">
             <Star className="w-16 h-16 rotate-12" />
@@ -102,7 +96,6 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
         </div>
       </section>
 
-      {/* 3. 精选18码 */}
       <section className="glass-panel rounded-2xl p-4">
         <h3 className="text-blue-500 text-[11px] font-black mb-3 flex items-center gap-1.5 bg-blue-50 px-2 py-0.5 rounded-md w-fit">
             <Hash className="w-3.5 h-3.5" /> 智能筛选18码
@@ -116,7 +109,6 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
         </div>
       </section>
 
-      {/* 4. 多维度建议 */}
       <div className="grid grid-cols-2 gap-3">
           <div className="glass-panel rounded-2xl p-4 border border-slate-100">
              <h3 className="text-slate-400 text-[10px] font-bold mb-3 flex items-center gap-1 uppercase">
@@ -144,7 +136,6 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
           </div>
       </div>
 
-       {/* 波色推荐 */}
       <section className="glass-panel rounded-2xl p-4 flex items-center justify-between border-l-4 border-l-amber-500">
            <h3 className="text-slate-600 text-[11px] font-black flex items-center gap-2">
                 <Palette className="w-4 h-4 text-slate-400" /> 推荐波色
@@ -155,7 +146,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
                        ${c === 'red' ? 'bg-red-500 text-white' : 
                          c === 'blue' ? 'bg-blue-500 text-white' : 
                          'bg-emerald-500 text-white'}`}>
-                        {COLOR_NAMES[c as 'red'|'blue'|'green']}波
+                        {COLOR_NAMES[c as 'red'|'blue'|'green'] || c}波
                    </div>
                ))}
            </div>
