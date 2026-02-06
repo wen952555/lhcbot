@@ -58,6 +58,12 @@ const App: React.FC = () => {
       }
   };
 
+  // 获取最新一期开奖对应的历史预测（如果有的话）
+  const latestDraw = history[0] || null;
+  const latestDrawPrediction = latestDraw 
+      ? predHistory.find(p => p.drawNumber === latestDraw.drawNumber)?.prediction 
+      : undefined;
+
   return (
     <div className="min-h-screen bg-slate-100 text-slate-800 font-sans selection:bg-amber-500/30 pb-10">
       <LotteryTabs 
@@ -66,7 +72,11 @@ const App: React.FC = () => {
         onSelect={setSelectedLottery}
       />
 
-      <LatestDraw draw={history[0] || null} isLoading={isLoading} />
+      <LatestDraw 
+        draw={latestDraw} 
+        isLoading={isLoading} 
+        prediction={latestDrawPrediction}
+      />
       
       <div className="px-4 mt-6">
         <PredictionPanel 
