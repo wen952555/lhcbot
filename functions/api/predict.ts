@@ -1,4 +1,6 @@
 
+import { generateDeterministicPrediction } from '../analysis';
+
 export async function onRequestPost(context: any) {
   const { request, env } = context;
   
@@ -6,13 +8,14 @@ export async function onRequestPost(context: any) {
     const { lotteryId } = await request.json();
     
     // --- 获取更多历史数据以支持算法回测 ---
+    // 增加 LIMIT 以确保实时计算时的准确性
     let historyData: any[] = [];
     if (env.DB) {
         const { results } = await env.DB.prepare(`
             SELECT * FROM lottery_draws 
             WHERE lottery_id = ? 
             ORDER BY draw_number DESC 
-            LIMIT 100
+            LIMIT 200
         `).bind(lotteryId).all();
         
         historyData = results.map((row: any) => ({
@@ -34,6 +37,14 @@ export async function onRequestPost(context: any) {
             prediction = JSON.parse(predRow.data as string);
             prediction.timestamp = predRow.updated_at;
         }
+    }
+
+    // --- 兜底逻辑：如果数据库没有预测，实时生成 ---
+    if (!prediction && historyData.length > 0) {
+        prediction = generateDeterministicPrediction(historyData);
+        prediction.timestamp = Date.now();
+        // 注意：这里不写入数据库，保持 GET/Query 操作的无副作用性，
+        // 且避免并发写入冲突，写入操作保留给 webhook 或同步动作。
     }
 
     // --- 获取预测历史记录 ---

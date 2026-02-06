@@ -198,12 +198,11 @@ export function generateDeterministicPrediction(history: any[]) {
     // 如果上一期数据异常，无法使用关联算法
     const hasLast = !isNaN(lastNum);
 
-    const scores: { n: number, s: number, debug?: string }[] = [];
+    const scores: { n: number, s: number }[] = [];
 
     // --- 综合打分循环 ---
     for (let n = 1; n <= 49; n++) {
         let finalScore = 0;
-        let reasons = [];
 
         // 1. 基础热度 (Base Heat)
         // 归一化频率: (freq / total_draws) * 100
@@ -246,7 +245,12 @@ export function generateDeterministicPrediction(history: any[]) {
     }
 
     // --- 排序与提取 ---
-    scores.sort((a, b) => b.s - a.s);
+    // 关键修复：增加次级排序规则，确保分数相同时结果唯一
+    scores.sort((a, b) => {
+        const diff = b.s - a.s;
+        if (Math.abs(diff) > 0.00001) return diff; // 分数不同
+        return a.n - b.n; // 分数相同，按号码从小到大排序
+    });
 
     const top18 = scores.slice(0, 18).map(x => x.n).sort((a,b)=>a-b);
     const top8 = scores.slice(0, 8).map(x => x.n).sort((a,b)=>a-b);
@@ -257,19 +261,29 @@ export function generateDeterministicPrediction(history: any[]) {
         const z = NUMBER_MAP[n]?.zodiac;
         if (z) zodiacScores[z] = (zodiacScores[z] || 0) + s;
     });
+    // 增加次级排序
     const topZodiacs = Object.entries(zodiacScores)
-        .sort(([,a], [,b]) => b - a)
+        .sort(([zA, sA], [zB, sB]) => {
+            const diff = sB - sA;
+            if (Math.abs(diff) > 0.00001) return diff;
+            return ZODIACS.indexOf(zA) - ZODIACS.indexOf(zB); // 固定生肖顺序
+        })
         .slice(0, 6)
         .map(([z]) => z);
 
-    // 尾数聚合 (取前20名分析)
+    // 尾数聚合
     const tailCounts: Record<number, number> = {};
     scores.slice(0, 20).forEach(({n}) => {
         const t = n % 10;
         tailCounts[t] = (tailCounts[t] || 0) + 1;
     });
+    // 增加次级排序
     const topTails = Object.entries(tailCounts)
-        .sort(([,a], [,b]) => b - a)
+        .sort(([tA, cA], [tB, cB]) => {
+            const diff = cB - cA;
+            if (diff !== 0) return diff;
+            return parseInt(tA) - parseInt(tB); // 固定尾数顺序
+        })
         .slice(0, 4)
         .map(([t]) => parseInt(t))
         .sort((a,b)=>a-b);
@@ -280,8 +294,13 @@ export function generateDeterministicPrediction(history: any[]) {
         const h = Math.floor(n / 10);
         headCounts[h] = (headCounts[h] || 0) + 1;
     });
+    // 增加次级排序
     const topHeads = Object.entries(headCounts)
-        .sort(([,a], [,b]) => b - a)
+        .sort(([hA, cA], [hB, cB]) => {
+            const diff = cB - cA;
+            if (diff !== 0) return diff;
+            return parseInt(hA) - parseInt(hB); // 固定头数顺序
+        })
         .slice(0, 2)
         .map(([h]) => parseInt(h))
         .sort((a,b)=>a-b);
@@ -292,14 +311,20 @@ export function generateDeterministicPrediction(history: any[]) {
         const c = NUMBER_MAP[n]?.color;
         if (c) colorScores[c] += s;
     });
+    // 增加次级排序
     const topColors = Object.entries(colorScores)
-        .sort(([,a], [,b]) => b - a)
+        .sort(([cA, sA], [cB, sB]) => {
+            const diff = sB - sA;
+            if (Math.abs(diff) > 0.00001) return diff;
+            // 固定颜色顺序: 红, 蓝, 绿
+            const order = ['red', 'blue', 'green'];
+            return order.indexOf(cA) - order.indexOf(cB);
+        })
         .slice(0, 2)
         .map(([c]) => c);
 
     // 信心计算
     // 基础信心 60，每多10期历史数据 +1，上限 92
-    // 如果数据极少，信心会很低
     const baseConf = 60 + Math.floor(history.length / 5);
     const confidence = Math.min(92, Math.max(50, baseConf));
     
