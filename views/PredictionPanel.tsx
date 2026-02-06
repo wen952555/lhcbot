@@ -172,13 +172,6 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
                ))}
            </div>
       </section>
-
-      <div className="p-4 flex items-start gap-2 opacity-50">
-        <AlertCircle className="text-slate-400 w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-        <p className="text-[9px] text-slate-500 leading-tight">
-          预测仅代表基于历史数据的数学概率建模结果，不作为博彩依据。大数据模型并非100%准确，请理性对待。
-        </p>
-      </div>
     </div>
   );
 };
