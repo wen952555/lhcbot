@@ -69,6 +69,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
          </div>
       </div>
 
+      {/* 核心六肖 */}
       <section className="glass-panel rounded-2xl p-4 relative overflow-hidden border-2 border-amber-400/20 shadow-xl shadow-amber-500/5">
         <div className="absolute -right-4 -top-4 opacity-[0.03] rotate-12">
             <Crown className="w-32 h-32 text-amber-900" />
@@ -90,30 +91,19 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
         </div>
       </section>
 
-      <section className="bg-gradient-to-r from-amber-500 to-orange-600 rounded-2xl p-4 shadow-xl shadow-amber-500/20 text-white relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-2 opacity-10">
-            <Star className="w-16 h-16 rotate-12" />
-        </div>
-        <div className="flex items-center justify-between mb-3 relative z-10">
-            <h3 className="text-[11px] font-black flex items-center gap-1.5 bg-white/20 backdrop-blur-md px-2 py-0.5 rounded-md">
-                <Star className="w-3.5 h-3.5" /> 回测精选8码
-            </h3>
-            <span className="text-[9px] text-white/70">高频回测锁定</span>
-        </div>
-        <div className="grid grid-cols-4 gap-3 relative z-10">
-            {prediction.numbers_8.map((num, i) => (
-                <div key={i} className="bg-white/10 backdrop-blur-lg rounded-xl py-2 flex items-center justify-center border border-white/20 font-mono font-black text-lg shadow-inner">
-                    {num.toString().padStart(2, '0')}
-                </div>
-            ))}
-        </div>
-      </section>
-
+      {/* 18码 + 8码高亮 */}
       <section className="glass-panel rounded-2xl p-4">
         <div className="flex justify-between items-center mb-3">
-            <h3 className="text-blue-500 text-[11px] font-black flex items-center gap-1.5 bg-blue-50 px-2 py-0.5 rounded-md">
-                <Hash className="w-3.5 h-3.5" /> 智能筛选18码
-            </h3>
+            <div className="flex items-center gap-2">
+                <h3 className="text-blue-500 text-[11px] font-black flex items-center gap-1.5 bg-blue-50 px-2 py-0.5 rounded-md">
+                    <Hash className="w-3.5 h-3.5" /> 智能筛选18码
+                </h3>
+                <span className="text-[9px] text-slate-400 flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block"></span>
+                    橙底为精选8码
+                </span>
+            </div>
+            
             <button 
                 onClick={handleCopy18}
                 className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border transition-all ${copied ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-500'}`}
@@ -123,14 +113,22 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
             </button>
         </div>
         <div className="grid grid-cols-6 gap-2">
-            {prediction.numbers_18.map((num, i) => (
-                <div key={i} className="aspect-square rounded-lg bg-white flex items-center justify-center border border-slate-200 text-slate-700 font-mono font-black text-sm shadow-sm hover:border-blue-300 hover:text-blue-600 transition-colors">
-                    {num.toString().padStart(2, '0')}
-                </div>
-            ))}
+            {prediction.numbers_18.map((num, i) => {
+                const isTop8 = prediction.numbers_8.includes(num);
+                return (
+                    <div key={i} className={`aspect-square rounded-lg flex items-center justify-center border font-mono font-black text-sm shadow-sm transition-colors
+                        ${isTop8 
+                            ? 'bg-amber-500 border-amber-600 text-white shadow-amber-500/20' 
+                            : 'bg-white border-slate-200 text-slate-700 hover:border-blue-300 hover:text-blue-600'
+                        }`}>
+                        {num.toString().padStart(2, '0')}
+                    </div>
+                );
+            })}
         </div>
       </section>
 
+      {/* 头尾数 */}
       <div className="grid grid-cols-2 gap-3">
           <div className="glass-panel rounded-2xl p-4 border border-slate-100">
              <h3 className="text-slate-400 text-[10px] font-bold mb-3 flex items-center gap-1 uppercase">
@@ -158,6 +156,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
           </div>
       </div>
 
+      {/* 波色 */}
       <section className="glass-panel rounded-2xl p-4 flex items-center justify-between border-l-4 border-l-amber-500">
            <h3 className="text-slate-600 text-[11px] font-black flex items-center gap-2">
                 <Palette className="w-4 h-4 text-slate-400" /> 推荐波色
