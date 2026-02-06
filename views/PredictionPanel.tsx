@@ -1,6 +1,6 @@
 
-import React from 'react';
-import { Crown, Layers, Hash, Palette, AlertCircle, BrainCircuit, Star } from 'lucide-react';
+import React, { useState } from 'react';
+import { Crown, Layers, Hash, Palette, AlertCircle, BrainCircuit, Star, Copy, Check } from 'lucide-react';
 import { PredictionResult } from '../types.ts';
 import { COLOR_NAMES } from '../constants.tsx';
 
@@ -14,6 +14,19 @@ interface PredictionPanelProps {
 }
 
 export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, isLoading, error, onPredict, lotteryName, nextDrawId }) => {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy18 = () => {
+    if (!prediction) return;
+    const text = prediction.numbers_18.map(n => n.toString().padStart(2, '0')).join(',');
+    navigator.clipboard.writeText(text).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    }).catch(err => {
+        console.error('Failed to copy: ', err);
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="py-20 flex flex-col items-center gap-4 glass-panel rounded-3xl mx-4 shadow-inner">
@@ -97,9 +110,18 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
       </section>
 
       <section className="glass-panel rounded-2xl p-4">
-        <h3 className="text-blue-500 text-[11px] font-black mb-3 flex items-center gap-1.5 bg-blue-50 px-2 py-0.5 rounded-md w-fit">
-            <Hash className="w-3.5 h-3.5" /> 智能筛选18码
-        </h3>
+        <div className="flex justify-between items-center mb-3">
+            <h3 className="text-blue-500 text-[11px] font-black flex items-center gap-1.5 bg-blue-50 px-2 py-0.5 rounded-md">
+                <Hash className="w-3.5 h-3.5" /> 智能筛选18码
+            </h3>
+            <button 
+                onClick={handleCopy18}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border transition-all ${copied ? 'bg-emerald-50 border-emerald-200 text-emerald-600' : 'bg-white border-slate-200 text-slate-500 hover:border-blue-300 hover:text-blue-500'}`}
+            >
+                {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                <span>{copied ? '已复制' : '复制'}</span>
+            </button>
+        </div>
         <div className="grid grid-cols-6 gap-2">
             {prediction.numbers_18.map((num, i) => (
                 <div key={i} className="aspect-square rounded-lg bg-white flex items-center justify-center border border-slate-200 text-slate-700 font-mono font-black text-sm shadow-sm hover:border-blue-300 hover:text-blue-600 transition-colors">
