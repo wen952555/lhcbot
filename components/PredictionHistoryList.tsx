@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Trophy, TrendingUp, Target, Hash, Palette, Layers } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { DrawResult, PredictionHistoryItem } from '../types.ts';
 import { NUMBER_MAP } from '../constants.tsx';
 import Ball from './Ball.tsx';
@@ -44,21 +44,20 @@ export const PredictionHistoryList: React.FC<PredictionHistoryListProps> = ({ pr
       };
   })();
 
-  const renderBadge = (label: string, isHit: boolean, pending: boolean, icon?: React.ReactNode) => {
+  const renderBadge = (label: string, isHit: boolean, pending: boolean) => {
       if (pending) return (
-        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] bg-slate-100 text-slate-400 border border-slate-200">
-           {label} 待开
+        <span className="px-2 py-1 rounded text-[10px] bg-slate-100 text-slate-400 border border-slate-200">
+           {label}待开
         </span>
       );
 
       return (
-        <span className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border transition-all
+        <span className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors
             ${isHit 
                 ? 'bg-red-50 text-red-600 border-red-200 shadow-sm' 
-                : 'bg-slate-50 text-slate-400 border-slate-100 opacity-70 grayscale'
+                : 'bg-slate-50 text-slate-300 border-slate-100'
             }`}>
-            {icon && <span className="w-2.5 h-2.5">{icon}</span>}
-            {label} {isHit ? '中' : '✕'}
+            {label}{isHit ? '中' : ''}
         </span>
       );
   };
@@ -137,11 +136,11 @@ export const PredictionHistoryList: React.FC<PredictionHistoryListProps> = ({ pr
               {/* 命中详情标签云 */}
               <div className="p-3">
                   <div className="flex flex-wrap gap-2">
-                      {renderBadge('六肖', !!hits.zodiac, pending, <Trophy />)}
-                      {renderBadge('18码', !!hits.num18, pending, <Target />)}
-                      {renderBadge('波色', !!hits.color, pending, <Palette />)}
-                      {renderBadge('头数', !!hits.head, pending, <Layers />)}
-                      {renderBadge('尾数', !!hits.tail, pending, <Hash />)}
+                      {renderBadge('六肖', !!hits.zodiac, pending)}
+                      {renderBadge('18码', !!hits.num18, pending)}
+                      {renderBadge('波色', !!hits.color, pending)}
+                      {renderBadge('头数', !!hits.head, pending)}
+                      {renderBadge('尾数', !!hits.tail, pending)}
                   </div>
 
                   {/* 失败提示 (仅当全部未中时显示) */}

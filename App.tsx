@@ -6,9 +6,8 @@ import { fetchLotteryHistory } from './geminiService.ts';
 import { LotteryTabs } from './components/LotteryTabs.tsx';
 import { LatestDraw } from './components/LatestDraw.tsx';
 import { HistoryList } from './components/HistoryList.tsx';
-import { PredictionHistoryList } from './components/PredictionHistoryList.tsx';
 import { PredictionPanel } from './views/PredictionPanel.tsx';
-import { History, Trophy } from 'lucide-react';
+import { History } from 'lucide-react';
 
 const App: React.FC = () => {
   const [selectedLottery, setSelectedLottery] = useState<LotteryConfig>(LOTTERY_CONFIGS[0]);
@@ -17,7 +16,7 @@ const App: React.FC = () => {
   const [predHistory, setPredHistory] = useState<PredictionHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<'none' | 'history' | 'prediction_history'>('none');
+  const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
     // Fix: Access Telegram WebApp through any cast to avoid TypeScript property error on window object
@@ -46,7 +45,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     loadData();
-    setActiveSection('none');
+    setShowHistory(false);
   }, [selectedLottery]);
 
   const getNextDrawId = () => {
@@ -80,31 +79,20 @@ const App: React.FC = () => {
         />
       </div>
 
-      <div className="px-4 mt-8 flex gap-3">
+      <div className="px-4 mt-8">
           <button 
-            onClick={() => setActiveSection(activeSection === 'history' ? 'none' : 'history')}
-            className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm border
-                ${activeSection === 'history' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+            onClick={() => setShowHistory(!showHistory)}
+            className={`w-full py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm border
+                ${showHistory ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
           >
-             <History className="w-4 h-4" /> 历史开奖
-          </button>
-          
-          <button 
-            onClick={() => setActiveSection(activeSection === 'prediction_history' ? 'none' : 'prediction_history')}
-            className={`flex-1 py-3 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm border
-                ${activeSection === 'prediction_history' ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-          >
-             <Trophy className="w-4 h-4" /> 预测战绩
+             <History className="w-4 h-4" /> 
+             {showHistory ? '收起历史记录' : '查看历史开奖与战绩'}
           </button>
       </div>
 
       <div className="mx-4 mt-4 animate-in slide-in-from-top-2 duration-300">
-          {activeSection === 'history' && history.length > 1 && (
-             <HistoryList history={history} />
-          )}
-
-          {activeSection === 'prediction_history' && (
-             <PredictionHistoryList predictions={predHistory} drawHistory={history} />
+          {showHistory && history.length > 1 && (
+             <HistoryList history={history} predictions={predHistory} />
           )}
       </div>
     </div>
