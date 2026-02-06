@@ -27,7 +27,7 @@ export async function onRequestPost(context: any) {
     }
 
     // --- 获取最新预测 ---
-    let prediction = null;
+    let prediction: any = null;
     if (env.DB) {
         const predRow = await env.DB.prepare(`
             SELECT data, updated_at FROM admin_predictions WHERE lottery_id = ?
@@ -41,8 +41,11 @@ export async function onRequestPost(context: any) {
 
     // --- 兜底逻辑：如果数据库没有预测，实时生成 ---
     if (!prediction && historyData.length > 0) {
-        prediction = generateDeterministicPrediction(historyData);
-        prediction.timestamp = Date.now();
+        const generated = generateDeterministicPrediction(historyData);
+        prediction = {
+            ...generated,
+            timestamp: Date.now()
+        };
         // 注意：这里不写入数据库，保持 GET/Query 操作的无副作用性，
         // 且避免并发写入冲突，写入操作保留给 webhook 或同步动作。
     }
