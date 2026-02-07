@@ -192,6 +192,7 @@ class MultiLagEngine {
             const zStats = this.getTransitionStats(this.matrices.zodiac, lag, prevInfo.zodiac, cInfo.zodiac);
             
             // 绝杀: 样本足且概率为0 (历史从未发生)
+            // 注意：数据量少时，样本不足(total small)，不应轻易绝杀
             if (zStats.total > 25 && zStats.count === 0) {
                 totalScore += this.weights.killPenalty * lagDecay; // 近期没出过惩罚更重
             } 
@@ -253,8 +254,9 @@ class MultiLagEngine {
 
 export function generateDeterministicPrediction(history: any[]) {
     // 数据校验
-    if (!history || history.length < 30) {
-        return { zodiacs:[], numbers_18:[], numbers_8:[], heads:[], tails:[], colors:[], reasoning:"数据积累不足，无法构建矩阵", confidence:0 };
+    // 修改：将最低数据门槛降低至3期，以便在数据稀缺时仍能提供基本的概率分析
+    if (!history || history.length < 3) {
+        return { zodiacs:[], numbers_18:[], numbers_8:[], heads:[], tails:[], colors:[], reasoning:"数据极度缺乏(少于3期)，无法构建分析矩阵", confidence:0 };
     }
 
     const engine = new MultiLagEngine(history);
@@ -344,9 +346,19 @@ export function generateDeterministicPrediction(history: any[]) {
         reasoning = `【大数据捕获】${bestReason}`;
     } else if (engine.flatTailStats.probability > 0.6) {
         reasoning = `【平特指引】历史数据显示，上期平码尾数(${Math.round(engine.flatTailStats.probability*100)}%)强力渗透特码。`;
+    } else if (history.length < 20) {
+        reasoning = `【样本预警】历史数据稀缺(${history.length}期)，算法基于有限样本推演，请谨慎参考。`;
     }
 
-    const confidence = Math.min(99, 80 + Math.floor(history.length / 30));
+    // 动态调整信心指数
+    let confidence = 50;
+    if (history.length < 10) {
+        confidence = 50 + history.length; // 3期->53%, 9期->59%
+    } else if (history.length < 30) {
+        confidence = 60 + Math.floor(history.length / 2); // 10期->65%, 20期->70%
+    } else {
+        confidence = Math.min(99, 80 + Math.floor(history.length / 30));
+    }
 
     return {
         zodiacs: topZodiacs,
