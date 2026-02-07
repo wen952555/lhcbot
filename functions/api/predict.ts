@@ -8,14 +8,14 @@ export async function onRequestPost(context: any) {
     const { lotteryId } = await request.json();
     
     // --- 获取更多历史数据以支持算法回测 ---
-    // 增加 LIMIT 以确保实时计算时的准确性
+    // 增加 LIMIT 以确保实时计算时的准确性 (400期能覆盖约2-3年的数据，足够建立统计模型)
     let historyData: any[] = [];
     if (env.DB) {
         const { results } = await env.DB.prepare(`
             SELECT * FROM lottery_draws 
             WHERE lottery_id = ? 
             ORDER BY draw_number DESC 
-            LIMIT 200
+            LIMIT 400
         `).bind(lotteryId).all();
         
         historyData = results.map((row: any) => ({
