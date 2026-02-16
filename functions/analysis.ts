@@ -1,5 +1,5 @@
 
-import { NUMBER_MAP, ZODIAC_RELATIONS, NumberInfo } from '../constants.tsx';
+import { NUMBER_MAP, ZODIAC_RELATIONS, NumberInfo, getZodiacByYear } from '../constants.tsx';
 
 // --- 全局常量 ---
 const ZODIACS = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
@@ -76,8 +76,9 @@ class MultiLagEngine {
         for (let i = 0; i < Math.min(12, total); i++) {
             const num = parseInt(this.history[i].specialNumber);
             if (!isNaN(num)) {
-                const info = NUMBER_MAP[num];
-                if (info) this.recentZodiacCounts[info.zodiac]++;
+                // 使用 getZodiacByYear 还原当时的真实生肖
+                const zodiac = getZodiacByYear(num, this.history[i].date);
+                if (zodiac) this.recentZodiacCounts[zodiac]++;
             }
         }
 
@@ -87,8 +88,10 @@ class MultiLagEngine {
             const currentDraw = this.history[i]; // T
             const curNum = parseInt(currentDraw.specialNumber);
             if (isNaN(curNum)) continue;
-            const curInfo = NUMBER_MAP[curNum];
-            if (!curInfo) continue;
+            
+            // 核心修正：使用开奖日期获取当时的生肖，而不是现在的生肖
+            const curZodiac = getZodiacByYear(curNum, currentDraw.date);
+            if (!curZodiac) continue;
 
             // 基础热度
             const recency = 1 + ((total - 1 - i) / total) * 2;
@@ -102,11 +105,16 @@ class MultiLagEngine {
                     const prevNum = parseInt(prevDraw.specialNumber);
                     
                     if (!isNaN(prevNum)) {
-                        const prevInfo = NUMBER_MAP[prevNum];
-                        if (prevInfo) {
+                        // 核心修正：上期数据也要还原当时的真实生肖
+                        const prevZodiac = getZodiacByYear(prevNum, prevDraw.date);
+                        
+                        if (prevZodiac) {
                             // 记录生肖转移: [Lag][PrevZodiac][CurZodiac]++
-                            this.record(this.matrices.zodiac, lag, prevInfo.zodiac, curInfo.zodiac);
-                            // 记录尾数转移
+                            // 例如：2024年 龙(1号) -> 2024年 蛇(13号)
+                            // 即使现在1号是马，这里统计的依然是 龙->蛇 的规律
+                            this.record(this.matrices.zodiac, lag, prevZodiac, curZodiac);
+                            
+                            // 记录尾数转移 (尾数不受年份影响，直接用)
                             this.record(this.matrices.tail, lag, prevNum % 10, curNum % 10);
                             // 记录012路转移
                             this.record(this.matrices.mod3, lag, getMod3(prevNum), getMod3(curNum));
@@ -163,9 +171,10 @@ class MultiLagEngine {
     }
 
     // --- 核心评分系统 ---
-    // 输入: 候选号码, 最近几期的开奖记录(referenceDraws: [T-1, T-2, ... T-7])
+    // 输入: 候选号码(使用当前马年映射), 参考历史(使用历史真实生肖)
     getCompositeScore(candidate: number, referenceDraws: any[]): { score: number, strongestReason: string } {
-        const cInfo = NUMBER_MAP[candidate];
+        // 候选号码必须使用 NUMBER_MAP (马年)，因为我们是为明天预测
+        const cInfo = NUMBER_MAP[candidate]; 
         if (!cInfo) return { score: 0, strongestReason: '' };
 
         let totalScore = 0;
@@ -174,36 +183,35 @@ class MultiLagEngine {
         // 1. 遍历所有滞后周期 (Lag 1 ~ 7)
         for (let lag = 1; lag <= MAX_LAG_SCAN; lag++) {
             // 获取 T-lag 期的开奖数据
-            // referenceDraws[0] 是 T-1, 下标 = lag - 1
             const drawIndex = lag - 1;
             if (drawIndex >= referenceDraws.length) break;
 
             const prevDraw = referenceDraws[drawIndex];
             const prevNum = parseInt(prevDraw.specialNumber);
             if (isNaN(prevNum)) continue;
-            const prevInfo = NUMBER_MAP[prevNum];
-            if (!prevInfo) continue;
+            
+            // 核心修正：参考的历史期数，必须还原为当时的真实生肖
+            // 例如上一期是2025年，1号是蛇。如果上一期开了1号，这里 prevZodiac 必须是 '蛇'
+            const prevZodiac = getZodiacByYear(prevNum, prevDraw.date);
+            if (!prevZodiac) continue;
 
-            // 基础权重衰减 (离得越近，基础影响越大，但如果有强规律，衰减可被忽略)
-            // Weight decay: 1.0, 0.85, 0.75 ...
+            // 基础权重衰减
             const lagDecay = 1 / Math.pow(lag, 0.4); 
 
             // --- A. 生肖规律 ---
-            const zStats = this.getTransitionStats(this.matrices.zodiac, lag, prevInfo.zodiac, cInfo.zodiac);
+            // 逻辑：历史上的 "PrevZodiac" 出了之后，是否倾向于出 "CandidateZodiac"(马年)?
+            const zStats = this.getTransitionStats(this.matrices.zodiac, lag, prevZodiac, cInfo.zodiac);
             
-            // 绝杀: 样本足且概率为0 (历史从未发生)
-            // 注意：数据量少时，样本不足(total small)，不应轻易绝杀
+            // 绝杀
             if (zStats.total > 25 && zStats.count === 0) {
-                totalScore += this.weights.killPenalty * lagDecay; // 近期没出过惩罚更重
+                totalScore += this.weights.killPenalty * lagDecay;
             } 
-            // 强规律发现 (概率显著高于随机值 1/12 ≈ 8%)
+            // 强规律
             else if (zStats.prob > 0.20) {
-                // 概率越高，得分指数级增长
                 const boost = zStats.prob * 100 * this.weights.lagPattern * lagDecay;
                 totalScore += boost;
-                reasons.push({ lag, type: '生肖', prob: zStats.prob, val: `${prevInfo.zodiac}->${cInfo.zodiac}` });
+                reasons.push({ lag, type: '生肖', prob: zStats.prob, val: `${prevZodiac}->${cInfo.zodiac}` });
             } else {
-                // 普通概率加分
                 totalScore += zStats.prob * 100 * this.weights.lagBase * lagDecay;
             }
 
@@ -211,7 +219,7 @@ class MultiLagEngine {
             const tStats = this.getTransitionStats(this.matrices.tail, lag, prevNum % 10, candidate % 10);
             if (tStats.total > 20 && tStats.count === 0) {
                 totalScore += (this.weights.killPenalty / 2) * lagDecay; 
-            } else if (tStats.prob > 0.18) { // 尾数随机 1/10
+            } else if (tStats.prob > 0.18) {
                 totalScore += tStats.prob * 80 * this.weights.lagPattern * lagDecay;
                 if (tStats.prob > 0.25) reasons.push({ lag, type: '尾数', prob: tStats.prob, val: `${prevNum%10}->${candidate%10}` });
             } else {
@@ -254,7 +262,6 @@ class MultiLagEngine {
 
 export function generateDeterministicPrediction(history: any[]) {
     // 数据校验
-    // 修改：将最低数据门槛降低至3期，以便在数据稀缺时仍能提供基本的概率分析
     if (!history || history.length < 3) {
         return { zodiacs:[], numbers_18:[], numbers_8:[], heads:[], tails:[], colors:[], reasoning:"数据极度缺乏(少于3期)，无法构建分析矩阵", confidence:0 };
     }

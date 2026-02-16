@@ -1,8 +1,7 @@
-
 {
   "name": "mark-six-ai-oracle",
-  "version": "1.0.0",
-  "description": "Mark Six Lottery Prediction with Statistical Analysis",
+  "version": "5.0.0",
+  "description": "Mark Six Lottery Prediction with Statistical Analysis V5",
   "type": "module",
   "scripts": {
     "dev": "vite",
