@@ -44,8 +44,8 @@ export const ZODIAC_RELATIONS: Record<string, { friends: string[], clash: string
 const ZODIAC_SEQ = ['马', '蛇', '龙', '兔', '虎', '牛', '鼠', '猪', '狗', '鸡', '猴', '羊'];
 const TARGET_YEAR = 2026; // 当前 NUMBER_MAP 配置对应的年份
 
-// 用于预测展示的日期（强制使用未来/马年配置）
-export const PREDICTION_DATE = '2026-01-01';
+// 用于预测展示的日期（强制使用未来/马年配置，设为2026春节后）
+export const PREDICTION_DATE = '2026-02-18';
 
 /**
  * 核心逻辑：根据开奖日期动态修正生肖
@@ -63,10 +63,21 @@ export const getZodiacByYear = (num: number, dateStr?: string): string => {
   let year = parseInt(targetDateStr.substring(0, 4));
   if (isNaN(year)) return NUMBER_MAP[num]?.zodiac || '';
 
-  // 2. 农历年份修正 (简单算法: 1月份通常属于上一年)
+  // 2. 农历年份修正
   const month = parseInt(targetDateStr.substring(5, 7));
-  if (!isNaN(month) && month === 1) {
-    year -= 1; 
+  const day = parseInt(targetDateStr.substring(8, 10));
+
+  // 针对2026年春节 (2月17日) 的特殊处理
+  if (year === 2026) {
+    // 2月17日之前属于蛇年 (2025)
+    if (!isNaN(month) && (month < 2 || (month === 2 && !isNaN(day) && day < 17))) {
+      year -= 1;
+    }
+  } else {
+    // 其他年份简单算法: 1月份通常属于上一年
+    if (!isNaN(month) && month === 1) {
+      year -= 1; 
+    }
   }
 
   // 如果年份 >= 2026，直接用现在的表 (且仅当确实是2026之后的数据)
