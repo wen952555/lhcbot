@@ -8,14 +8,14 @@ export async function onRequestPost(context: any) {
     const { lotteryId } = await request.json();
     
     // --- 获取更多历史数据以支持算法回测 ---
-    // 增加 LIMIT 以确保实时计算时的准确性 (400期能覆盖约2-3年的数据，足够建立统计模型)
+    // 修正：统一使用 LIMIT 500，与 webhook 保持一致，确保算法输入样本相同
     let historyData: any[] = [];
     if (env.DB) {
         const { results } = await env.DB.prepare(`
             SELECT * FROM lottery_draws 
             WHERE lottery_id = ? 
             ORDER BY draw_number DESC 
-            LIMIT 400
+            LIMIT 500
         `).bind(lotteryId).all();
         
         historyData = results.map((row: any) => ({
@@ -42,12 +42,21 @@ export async function onRequestPost(context: any) {
     // --- 兜底逻辑：如果数据库没有预测，实时生成 ---
     if (!prediction && historyData.length > 0) {
         const generated = generateDeterministicPrediction(historyData);
+        const now = Date.now();
         prediction = {
             ...generated,
-            timestamp: Date.now()
+            timestamp: now
         };
-        // 注意：这里不写入数据库，保持 GET/Query 操作的无副作用性，
-        // 且避免并发写入冲突，写入操作保留给 webhook 或同步动作。
+        
+        // 修正：将生成的预测写入数据库，确保 Bot 和前端下次读取时结果一致
+        try {
+             await env.DB.prepare(`
+                INSERT OR REPLACE INTO admin_predictions (lottery_id, data, updated_at)
+                VALUES (?, ?, ?)
+            `).bind(lotteryId, JSON.stringify(generated), now).run();
+        } catch(e) {
+            console.error("Failed to cache prediction", e);
+        }
     }
 
     // --- 获取预测历史记录 ---

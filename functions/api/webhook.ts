@@ -263,6 +263,7 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
 
     const historyData = results.map((row: any) => ({
         drawNumber: row.draw_number,
+        date: row.open_time, // 关键修复：补全 date 字段，分析引擎需要它来判断年份生肖
         numbers: JSON.parse(row.numbers),
         specialNumber: row.special_number
     }));
