@@ -2,7 +2,7 @@
 import React from 'react';
 import { DrawResult, PredictionResult } from '../types.ts';
 import Ball from './Ball.tsx';
-import { NUMBER_MAP } from '../constants.tsx';
+import { NUMBER_MAP, getZodiacByYear } from '../constants.tsx';
 
 interface LatestDrawProps {
   draw: DrawResult | null;
@@ -31,10 +31,12 @@ export const LatestDraw: React.FC<LatestDrawProps> = ({ draw, prediction, isLoad
   const hitBadges: string[] = [];
   if (prediction) {
       const spInfo = NUMBER_MAP[draw.specialNumber];
+      // Get the zodiac valid at the time of the draw
+      const spZodiac = getZodiacByYear(draw.specialNumber, draw.date);
       const p = prediction;
       const num = draw.specialNumber;
 
-      if (spInfo && p.zodiacs.includes(spInfo.zodiac)) hitBadges.push("六肖中");
+      if (spZodiac && p.zodiacs.includes(spZodiac)) hitBadges.push("六肖中");
       if (p.numbers_18.includes(num)) hitBadges.push("18码中");
       if (spInfo && p.colors.includes(spInfo.color)) hitBadges.push("波色中");
       if (p.heads.includes(Math.floor(num / 10))) hitBadges.push("头数中");
@@ -58,11 +60,11 @@ export const LatestDraw: React.FC<LatestDrawProps> = ({ draw, prediction, isLoad
       <div className="flex justify-between items-center relative z-10">
         <div className="flex gap-1.5 flex-wrap">
           {draw.numbers.map((n, idx) => (
-            <Ball key={idx} number={n} size="sm" />
+            <Ball key={idx} number={n} size="sm" date={draw.date} />
           ))}
         </div>
         <div className="h-8 w-px bg-slate-300 mx-2"></div>
-        <Ball number={draw.specialNumber} size="sm" isSpecial />
+        <Ball number={draw.specialNumber} size="sm" isSpecial date={draw.date} />
       </div>
 
       {/* 战绩展示区域 */}

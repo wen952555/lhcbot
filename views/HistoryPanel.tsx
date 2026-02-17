@@ -3,7 +3,7 @@ import React from 'react';
 import { History } from 'lucide-react';
 import { DrawResult } from '../types.ts';
 import Ball from '../components/Ball.tsx';
-import { NUMBER_MAP, COLOR_NAMES } from '../constants.tsx';
+import { NUMBER_MAP, COLOR_NAMES, getZodiacByYear } from '../constants.tsx';
 
 interface HistoryPanelProps {
   history: DrawResult[];
@@ -32,21 +32,23 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({ history, lotteryName
             <tbody className="divide-y divide-slate-800">
               {history.map((draw, i) => {
                 const spInfo = NUMBER_MAP[draw.specialNumber];
+                const dynamicZodiac = getZodiacByYear(draw.specialNumber, draw.date);
+                
                 return (
                   <tr key={i} className="hover:bg-slate-700/30 transition-colors">
                     <td className="px-6 py-6 font-mono text-amber-200 text-sm">{draw.drawNumber}</td>
                     <td className="px-6 py-6">
                       <div className="flex gap-2">
                         {draw.numbers.map((n, idx) => (
-                          <Ball key={idx} number={n} size="sm" />
+                          <Ball key={idx} number={n} size="sm" date={draw.date} />
                         ))}
                       </div>
                     </td>
                     <td className="px-6 py-6">
                       <div className="flex items-center gap-3">
-                        <Ball number={draw.specialNumber} size="sm" isSpecial />
+                        <Ball number={draw.specialNumber} size="sm" isSpecial date={draw.date} />
                         <div className="flex flex-col text-[10px]">
-                          <span className="text-slate-300 font-bold">{spInfo?.zodiac}</span>
+                          <span className="text-slate-300 font-bold">{dynamicZodiac}</span>
                           <span className={spInfo?.color ? (spInfo.color === 'red' ? 'text-red-400' : spInfo.color === 'blue' ? 'text-blue-400' : 'text-emerald-400') : ''}>
                              {spInfo?.color ? COLOR_NAMES[spInfo.color] : ''}
                           </span>

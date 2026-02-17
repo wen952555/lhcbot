@@ -1,8 +1,9 @@
 
 import React, { useState } from 'react';
-import { Crown, Layers, Hash, Palette, AlertCircle, BrainCircuit, Sparkles, Copy, Check, Info } from 'lucide-react';
+import { Crown, Layers, Hash, Palette, BrainCircuit, Sparkles, Copy, Check, Info } from 'lucide-react';
 import { PredictionResult } from '../types.ts';
-import { COLOR_NAMES } from '../constants.tsx';
+import { COLOR_NAMES, PREDICTION_DATE } from '../constants.tsx';
+import Ball from '../components/Ball.tsx';
 
 interface PredictionPanelProps {
   prediction: PredictionResult | null;
@@ -125,16 +126,23 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
                 <span>{copied ? '已复制' : '复制号码'}</span>
             </button>
         </div>
-        <div className="grid grid-cols-6 gap-2.5">
+        {/* 增加 row-gap 以容纳生肖文字 */}
+        <div className="grid grid-cols-6 gap-x-2.5 gap-y-4">
             {prediction.numbers_18.map((num, i) => {
                 const isTop8 = prediction.numbers_8.includes(num);
                 return (
-                    <div key={i} className={`aspect-square rounded-xl flex items-center justify-center font-mono font-bold text-sm shadow-sm transition-all
-                        ${isTop8 
-                            ? 'bg-amber-500 text-white shadow-amber-500/20 scale-105 z-10 ring-2 ring-white' 
-                            : 'bg-white border border-slate-200 text-slate-600'
-                        }`}>
-                        {num.toString().padStart(2, '0')}
+                    <div key={i} className={`relative flex items-center justify-center transition-all ${isTop8 ? 'scale-110 z-10' : ''}`}>
+                         {/* 
+                            关键修改：showZodiac={true}
+                            配合 PREDICTION_DATE (2026年)，这里将显示【马年】的生肖排位。
+                         */}
+                        <Ball number={num} size="sm" date={PREDICTION_DATE} showZodiac={true} />
+                        {isTop8 && (
+                           <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                           </span>
+                        )}
                     </div>
                 );
             })}
@@ -190,7 +198,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
       <div className="flex items-start gap-2 px-2 opacity-60">
         <Info className="w-3 h-3 mt-0.5 flex-shrink-0 text-slate-400" />
         <p className="text-[10px] text-slate-400 leading-tight">
-            算法基于历史数据统计概率，仅供娱乐与研究，请理性参考。
+            算法基于历史数据统计概率，预测结果展示为【马年】排位（1号马）。
         </p>
       </div>
 

@@ -24,9 +24,6 @@ export interface NumberInfo {
 }
 
 // 生肖关系配置
-// 三合：明合，大吉
-// 六合：暗合，贵人
-// 相冲：对立，相克
 export const ZODIAC_RELATIONS: Record<string, { friends: string[], clash: string }> = {
   '鼠': { friends: ['龙', '猴', '牛'], clash: '马' },
   '牛': { friends: ['蛇', '鸡', '鼠'], clash: '羊' },
@@ -45,7 +42,10 @@ export const ZODIAC_RELATIONS: Record<string, { friends: string[], clash: string
 // 2026 马年标准生肖顺序 (Index 0 = 1号的生肖)
 // 顺序: 马->蛇->龙->兔->虎->牛->鼠->猪->狗->鸡->猴->羊
 const ZODIAC_SEQ = ['马', '蛇', '龙', '兔', '虎', '牛', '鼠', '猪', '狗', '鸡', '猴', '羊'];
-const TARGET_YEAR = 2026; // 当前配置对应的年份
+const TARGET_YEAR = 2026; // 当前 NUMBER_MAP 配置对应的年份
+
+// 用于预测展示的日期（强制使用未来/马年配置）
+export const PREDICTION_DATE = '2026-01-01';
 
 /**
  * 核心逻辑：根据开奖日期动态修正生肖
@@ -56,25 +56,21 @@ const TARGET_YEAR = 2026; // 当前配置对应的年份
  * 2024年 1号=龙 (Index 2) -> 偏移+2
  */
 export const getZodiacByYear = (num: number, dateStr?: string): string => {
-  // 默认返回当前配置 (马年)
-  const defaultZodiac = NUMBER_MAP[num]?.zodiac || '';
-  if (!dateStr) return defaultZodiac;
+  // 如果没有提供日期，默认使用当前时间
+  const targetDateStr = dateStr || new Date().toISOString();
 
   // 1. 提取年份
-  let year = parseInt(dateStr.substring(0, 4));
-  if (isNaN(year)) return defaultZodiac;
+  let year = parseInt(targetDateStr.substring(0, 4));
+  if (isNaN(year)) return NUMBER_MAP[num]?.zodiac || '';
 
-  // 2. 农历年份修正 (简单算法)
-  // 六合彩生肖切换通常在立春或春节。
-  // 如果是1月，大概率还属于上一个生肖年。
-  // 为了计算方便，且绝大多数情况适用，我们规定：1月份的数据算作上一年。
-  const month = parseInt(dateStr.substring(5, 7));
+  // 2. 农历年份修正 (简单算法: 1月份通常属于上一年)
+  const month = parseInt(targetDateStr.substring(5, 7));
   if (!isNaN(month) && month === 1) {
     year -= 1; 
   }
 
-  // 如果年份 >= 2026，直接用现在的表
-  if (year >= TARGET_YEAR) return defaultZodiac;
+  // 如果年份 >= 2026，直接用现在的表 (且仅当确实是2026之后的数据)
+  if (year >= TARGET_YEAR) return NUMBER_MAP[num]?.zodiac || '';
 
   // 3. 计算偏移量
   const yearOffset = TARGET_YEAR - year; // 例如 2025年，差1

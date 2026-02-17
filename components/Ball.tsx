@@ -1,15 +1,16 @@
 
 import React from 'react';
-import { getNumberColor, NUMBER_MAP } from '../constants.tsx';
+import { getNumberColor, NUMBER_MAP, getZodiacByYear } from '../constants.tsx';
 
 interface BallProps {
   number: number;
   isSpecial?: boolean;
   size?: 'sm' | 'md' | 'lg';
   showZodiac?: boolean;
+  date?: string; // Add date prop to calculate zodiac correctly
 }
 
-const Ball: React.FC<BallProps> = ({ number, isSpecial = false, size = 'md', showZodiac = true }) => {
+const Ball: React.FC<BallProps> = ({ number, isSpecial = false, size = 'md', showZodiac = true, date }) => {
   const sizeClasses = {
     sm: 'w-8 h-8 text-xs',
     md: 'w-12 h-12 text-base font-bold',
@@ -19,6 +20,9 @@ const Ball: React.FC<BallProps> = ({ number, isSpecial = false, size = 'md', sho
   const info = NUMBER_MAP[number];
   const formattedNumber = number.toString().padStart(2, '0');
   const baseColor = getNumberColor(number);
+  
+  // Use getZodiacByYear with the specific date, or default to current date logic
+  const displayZodiac = showZodiac ? getZodiacByYear(number, date) : '';
 
   return (
     <div className="flex flex-col items-center gap-1 group">
@@ -27,7 +31,7 @@ const Ball: React.FC<BallProps> = ({ number, isSpecial = false, size = 'md', sho
       </div>
       {showZodiac && info && (
         <span className={`text-[10px] font-bold ${info.color === 'red' ? 'text-red-500' : info.color === 'blue' ? 'text-blue-500' : 'text-emerald-600'}`}>
-          {info.zodiac}
+          {displayZodiac}
         </span>
       )}
     </div>

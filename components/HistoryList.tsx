@@ -2,7 +2,7 @@
 import React from 'react';
 import { DrawResult, PredictionHistoryItem } from '../types.ts';
 import Ball from './Ball.tsx';
-import { NUMBER_MAP } from '../constants.tsx';
+import { NUMBER_MAP, getZodiacByYear } from '../constants.tsx';
 
 interface HistoryListProps {
   history: DrawResult[];
@@ -21,9 +21,12 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, predictions =
   return (
       <div className="space-y-3 pb-8">
         {pastDraws.map((draw, i) => {
-           const spInfo = NUMBER_MAP[draw.specialNumber];
            const dateStr = draw.date ? draw.date.split(' ')[0] : '--';
            
+           // Calculate dynamic zodiac for the special number based on its date
+           const spZodiac = getZodiacByYear(draw.specialNumber, draw.date);
+           const spInfo = NUMBER_MAP[draw.specialNumber];
+
            // 查找对应预测
            const predItem = predictions.find(p => p.drawNumber === draw.drawNumber);
            const hitBadges: string[] = [];
@@ -32,7 +35,8 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, predictions =
                const p = predItem.prediction;
                const num = draw.specialNumber;
                
-               if (p.zodiacs.includes(spInfo.zodiac)) hitBadges.push("六肖中");
+               // Check Zodiac Hit using the dynamic zodiac
+               if (p.zodiacs.includes(spZodiac)) hitBadges.push("六肖中");
                if (p.numbers_18.includes(num)) hitBadges.push("18码中");
                if (p.colors.includes(spInfo.color)) hitBadges.push("波色中");
                if (p.heads.includes(Math.floor(num / 10))) hitBadges.push("头数中");
@@ -49,16 +53,16 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, predictions =
                 
                 <div className="flex gap-1">
                     {draw.numbers.map((n, idx) => (
-                    <Ball key={idx} number={n} size="sm" showZodiac={false} />
+                    <Ball key={idx} number={n} size="sm" showZodiac={false} date={draw.date} />
                     ))}
                 </div>
 
                 <div className="w-px h-6 bg-slate-300 mx-2"></div>
 
                 <div className="flex flex-col items-center w-8 flex-shrink-0">
-                    <Ball number={draw.specialNumber} size="sm" isSpecial showZodiac={false} />
+                    <Ball number={draw.specialNumber} size="sm" isSpecial showZodiac={false} date={draw.date} />
                     <span className="text-[9px] scale-75 mt-0.5 text-slate-500 font-medium">
-                        {spInfo?.zodiac}
+                        {spZodiac}
                     </span>
                 </div>
               </div>
