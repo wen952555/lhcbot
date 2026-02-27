@@ -9,10 +9,14 @@ const MAX_LAG_SCAN = 7; // 向前扫描7期寻找规律
 const getDigitSum = (num: number): number => {
     const tens = Math.floor(num / 10);
     const units = num % 10;
-    return (tens + units) % 10;
+    return tens + units;
 };
 
 const getMod3 = (num: number): number => num % 3;
+const getOddEven = (num: number): string => num % 2 === 0 ? 'even' : 'odd';
+const getBigSmall = (num: number): string => num >= 25 ? 'big' : 'small';
+const getSumOddEven = (num: number): string => getDigitSum(num) % 2 === 0 ? 'even' : 'odd';
+const getSumBigSmall = (num: number): string => getDigitSum(num) >= 7 ? 'big' : 'small';
 
 // --- 统计容器接口 ---
 interface MatrixSet {
@@ -20,6 +24,11 @@ interface MatrixSet {
     zodiac: Record<number, Record<string, Record<string, number>>>;
     tail: Record<number, Record<number, Record<number, number>>>;
     mod3: Record<number, Record<number, Record<number, number>>>;
+    oddEven: Record<number, Record<string, Record<string, number>>>;
+    bigSmall: Record<number, Record<string, Record<string, number>>>;
+    color: Record<number, Record<string, Record<string, number>>>;
+    sumOddEven: Record<number, Record<string, Record<string, number>>>;
+    sumBigSmall: Record<number, Record<string, Record<string, number>>>;
 }
 
 // --- 核心分析引擎 ---
@@ -34,7 +43,12 @@ class MultiLagEngine {
     matrices: MatrixSet = {
         zodiac: {},
         tail: {},
-        mod3: {}
+        mod3: {},
+        oddEven: {},
+        bigSmall: {},
+        color: {},
+        sumOddEven: {},
+        sumBigSmall: {}
     };
 
     // 3. 平特关联
@@ -47,7 +61,12 @@ class MultiLagEngine {
         lagPattern: 20.0,  // 发现强规律时的额外加分
         flatStrategy: 0,   // 平特 (动态)
         killPenalty: -150, // 绝杀 (一旦触犯历史0概率，直接杀死)
-        overheatPenalty: -40 // 过热惩罚
+        overheatPenalty: -40, // 过热惩罚
+        oddEvenBase: 3.0,
+        bigSmallBase: 3.0,
+        colorBase: 4.0,
+        sumOddEvenBase: 2.0,
+        sumBigSmallBase: 2.0
     };
 
     constructor(history: any[]) {
@@ -66,6 +85,11 @@ class MultiLagEngine {
             this.matrices.zodiac[lag] = {};
             this.matrices.tail[lag] = {};
             this.matrices.mod3[lag] = {};
+            this.matrices.oddEven[lag] = {};
+            this.matrices.bigSmall[lag] = {};
+            this.matrices.color[lag] = {};
+            this.matrices.sumOddEven[lag] = {};
+            this.matrices.sumBigSmall[lag] = {};
         }
     }
 
@@ -92,6 +116,8 @@ class MultiLagEngine {
             // 核心修正：使用开奖日期获取当时的生肖，而不是现在的生肖
             const curZodiac = getZodiacByYear(curNum, currentDraw.date);
             if (!curZodiac) continue;
+            
+            const curColor = NUMBER_MAP[curNum]?.color;
 
             // 基础热度
             const recency = 1 + ((total - 1 - i) / total) * 2;
@@ -107,8 +133,9 @@ class MultiLagEngine {
                     if (!isNaN(prevNum)) {
                         // 核心修正：上期数据也要还原当时的真实生肖
                         const prevZodiac = getZodiacByYear(prevNum, prevDraw.date);
+                        const prevColor = NUMBER_MAP[prevNum]?.color;
                         
-                        if (prevZodiac) {
+                        if (prevZodiac && curColor && prevColor) {
                             // 记录生肖转移: [Lag][PrevZodiac][CurZodiac]++
                             // 例如：2024年 龙(1号) -> 2024年 蛇(13号)
                             // 即使现在1号是马，这里统计的依然是 龙->蛇 的规律
@@ -118,6 +145,13 @@ class MultiLagEngine {
                             this.record(this.matrices.tail, lag, prevNum % 10, curNum % 10);
                             // 记录012路转移
                             this.record(this.matrices.mod3, lag, getMod3(prevNum), getMod3(curNum));
+                            
+                            // 新增维度转移
+                            this.record(this.matrices.oddEven, lag, getOddEven(prevNum), getOddEven(curNum));
+                            this.record(this.matrices.bigSmall, lag, getBigSmall(prevNum), getBigSmall(curNum));
+                            this.record(this.matrices.color, lag, prevColor, curColor);
+                            this.record(this.matrices.sumOddEven, lag, getSumOddEven(prevNum), getSumOddEven(curNum));
+                            this.record(this.matrices.sumBigSmall, lag, getSumBigSmall(prevNum), getSumBigSmall(curNum));
                         }
                     }
                 }
@@ -193,7 +227,8 @@ class MultiLagEngine {
             // 核心修正：参考的历史期数，必须还原为当时的真实生肖
             // 例如上一期是2025年，1号是蛇。如果上一期开了1号，这里 prevZodiac 必须是 '蛇'
             const prevZodiac = getZodiacByYear(prevNum, prevDraw.date);
-            if (!prevZodiac) continue;
+            const prevColor = NUMBER_MAP[prevNum]?.color;
+            if (!prevZodiac || !prevColor) continue;
 
             // 基础权重衰减
             const lagDecay = 1 / Math.pow(lag, 0.4); 
@@ -229,6 +264,23 @@ class MultiLagEngine {
             // --- C. 012路规律 ---
             const mStats = this.getTransitionStats(this.matrices.mod3, lag, getMod3(prevNum), getMod3(candidate));
             totalScore += mStats.prob * 40 * this.weights.lagBase * lagDecay;
+            
+            // --- D. 新增维度规律 ---
+            const oeStats = this.getTransitionStats(this.matrices.oddEven, lag, getOddEven(prevNum), getOddEven(candidate));
+            totalScore += oeStats.prob * 30 * this.weights.oddEvenBase * lagDecay;
+            
+            const bsStats = this.getTransitionStats(this.matrices.bigSmall, lag, getBigSmall(prevNum), getBigSmall(candidate));
+            totalScore += bsStats.prob * 30 * this.weights.bigSmallBase * lagDecay;
+            
+            const cStats = this.getTransitionStats(this.matrices.color, lag, prevColor, cInfo.color);
+            totalScore += cStats.prob * 40 * this.weights.colorBase * lagDecay;
+            if (cStats.prob > 0.45) reasons.push({ lag, type: '波色', prob: cStats.prob, val: `${prevColor}->${cInfo.color}` });
+            
+            const soeStats = this.getTransitionStats(this.matrices.sumOddEven, lag, getSumOddEven(prevNum), getSumOddEven(candidate));
+            totalScore += soeStats.prob * 20 * this.weights.sumOddEvenBase * lagDecay;
+            
+            const sbsStats = this.getTransitionStats(this.matrices.sumBigSmall, lag, getSumBigSmall(prevNum), getSumBigSmall(candidate));
+            totalScore += sbsStats.prob * 20 * this.weights.sumBigSmallBase * lagDecay;
         }
 
         // 2. 平特关联 (只看 T-1)

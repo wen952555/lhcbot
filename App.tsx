@@ -7,7 +7,8 @@ import { LotteryTabs } from './components/LotteryTabs.tsx';
 import { LatestDraw } from './components/LatestDraw.tsx';
 import { HistoryList } from './components/HistoryList.tsx';
 import { PredictionPanel } from './views/PredictionPanel.tsx';
-import { History, RefreshCw, AlertTriangle } from 'lucide-react';
+import { StatisticsPanel } from './views/StatisticsPanel.tsx';
+import { History, RefreshCw, AlertTriangle, BarChart3 } from 'lucide-react';
 
 const App: React.FC = () => {
   const [selectedLottery, setSelectedLottery] = useState<LotteryConfig>(LOTTERY_CONFIGS[0]);
@@ -17,6 +18,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   useEffect(() => {
     const tg = (window as any).Telegram;
@@ -47,6 +49,7 @@ const App: React.FC = () => {
   useEffect(() => {
     loadData();
     setShowHistory(false);
+    setShowStats(false);
   }, [loadData]);
 
   const getNextDrawId = () => {
@@ -118,18 +121,40 @@ const App: React.FC = () => {
             />
         </div>
 
-        <div className="px-4 pt-2">
+        <div className="px-4 pt-2 flex gap-3">
             <button 
-                onClick={() => setShowHistory(!showHistory)}
-                className={`w-full py-3.5 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm active:scale-[0.98]
+                onClick={() => {
+                    setShowStats(!showStats);
+                    if (!showStats) setShowHistory(false);
+                }}
+                className={`flex-1 py-3.5 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm active:scale-[0.98]
+                    ${showStats 
+                        ? 'bg-blue-600 text-white shadow-blue-600/20' 
+                        : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
+            >
+                <BarChart3 className="w-4 h-4" /> 
+                {showStats ? '收起统计' : '数据统计'}
+            </button>
+            <button 
+                onClick={() => {
+                    setShowHistory(!showHistory);
+                    if (!showHistory) setShowStats(false);
+                }}
+                className={`flex-1 py-3.5 rounded-xl flex items-center justify-center gap-2 text-xs font-bold transition-all shadow-sm active:scale-[0.98]
                     ${showHistory 
                         ? 'bg-slate-800 text-white shadow-slate-800/20' 
                         : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
             >
                 <History className="w-4 h-4" /> 
-                {showHistory ? '收起历史数据' : '查看历史开奖与战绩'}
+                {showHistory ? '收起历史' : '历史战绩'}
             </button>
         </div>
+
+        {showStats && (
+            <div className="mx-4 animate-in slide-in-from-top-4 fade-in duration-300">
+                <StatisticsPanel history={history} />
+            </div>
+        )}
 
         {showHistory && (
             <div className="mx-4 animate-in slide-in-from-top-4 fade-in duration-300">

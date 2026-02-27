@@ -103,7 +103,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
       </section>
 
       {/* 18码 + 8码 */}
-      <section className="glass-panel rounded-2xl p-5">
+      <section className="glass-panel rounded-2xl p-5 shadow-sm">
         <div className="flex justify-between items-center mb-4">
             <div className="flex items-center gap-2">
                 <h3 className="text-blue-600 text-xs font-black flex items-center gap-1.5">
@@ -151,7 +151,7 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
 
       {/* 头尾数 & 波色 Grid */}
       <div className="grid grid-cols-2 gap-4">
-          <div className="glass-panel rounded-2xl p-4 flex flex-col gap-3">
+          <div className="glass-panel rounded-2xl p-4 flex flex-col gap-3 shadow-sm">
              <h3 className="text-slate-500 text-[10px] font-bold flex items-center gap-1.5 uppercase">
                 <Layers className="w-3.5 h-3.5" /> 头数推荐
              </h3>
@@ -164,20 +164,20 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
              </div>
           </div>
           
-           <div className="glass-panel rounded-2xl p-4 flex flex-col gap-3">
+           <div className="glass-panel rounded-2xl p-4 flex flex-col gap-3 shadow-sm">
              <h3 className="text-slate-500 text-[10px] font-bold flex items-center gap-1.5 uppercase">
                 <Layers className="w-3.5 h-3.5" /> 尾数围攻
              </h3>
              <div className="flex flex-wrap gap-1.5">
                  {prediction.tails.map((t, i) => (
-                     <span key={i} className="text-xs font-black bg-white text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md">
+                     <span key={i} className="text-xs font-black bg-white text-slate-700 border border-slate-200 px-2.5 py-1 rounded-md shadow-sm">
                         {t}
                      </span>
                  ))}
              </div>
           </div>
 
-          <div className="col-span-2 glass-panel rounded-2xl p-4 flex items-center justify-between border-l-4 border-l-purple-500">
+          <div className="col-span-2 glass-panel rounded-2xl p-4 flex items-center justify-between border-l-4 border-l-purple-500 shadow-sm">
              <h3 className="text-slate-700 text-xs font-black flex items-center gap-2">
                 <Palette className="w-4 h-4 text-purple-500" /> 推荐波色
              </h3>
