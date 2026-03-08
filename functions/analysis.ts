@@ -312,9 +312,12 @@ class MultiLagEngine {
 
     // --- 核心评分系统 ---
     // 输入: 候选号码(使用当前马年映射), 参考历史(使用历史真实生肖)
-    getCompositeScore(candidate: number, referenceDraws: any[]): { score: number, strongestReason: string } {
+    getCompositeScore(candidate: number, referenceDraws: any[], targetDate?: string): { score: number, strongestReason: string } {
         const cInfo = NUMBER_MAP[candidate]; 
         if (!cInfo) return { score: 0, strongestReason: '' };
+
+        // Use dynamic zodiac for candidate based on target date
+        const candidateZodiac = getZodiacByYear(candidate, targetDate);
 
         let totalScore = 0;
         let reasons: { lag: number, type: string, prob: number, val: string }[] = [];
@@ -355,7 +358,7 @@ class MultiLagEngine {
             const lagDecay = 1 / Math.pow(lag, 0.4); 
 
             // --- A. 生肖规律 ---
-            const zStats = this.getTransitionStats(this.matrices.zodiac, lag, prevZodiac, cInfo.zodiac);
+            const zStats = this.getTransitionStats(this.matrices.zodiac, lag, prevZodiac, candidateZodiac);
             
             // 绝杀
             if (zStats.total > 25 && zStats.count === 0) {
@@ -365,7 +368,7 @@ class MultiLagEngine {
             else if (zStats.prob > 0.20) {
                 const boost = zStats.prob * 100 * this.weights.lagPattern * lagDecay;
                 totalScore += boost;
-                reasons.push({ lag, type: '生肖', prob: zStats.prob, val: `${prevZodiac}->${cInfo.zodiac}` });
+                reasons.push({ lag, type: '生肖', prob: zStats.prob, val: `${prevZodiac}->${candidateZodiac}` });
             } else {
                 totalScore += zStats.prob * 100 * this.weights.lagBase * lagDecay;
             }
@@ -412,7 +415,7 @@ class MultiLagEngine {
         }
 
         // 4. 过热降权 (生肖过热)
-        if (this.recentZodiacCounts[cInfo.zodiac] >= 4) {
+        if (this.recentZodiacCounts[candidateZodiac] >= 4) {
             totalScore += this.weights.overheatPenalty;
         }
 
@@ -431,7 +434,7 @@ class MultiLagEngine {
     }
 }
 
-export function generateDeterministicPrediction(history: any[]) {
+export function generateDeterministicPrediction(history: any[], targetDate?: string) {
     // 数据校验
     if (!history || history.length < 3) {
         return { zodiacs:[], numbers_18:[], numbers_8:[], heads:[], tails:[], colors:[], reasoning:"数据极度缺乏(少于3期)，无法构建分析矩阵", confidence:0 };
@@ -445,10 +448,28 @@ export function generateDeterministicPrediction(history: any[]) {
     const scores: { n: number, s: number, z: string, reason: string }[] = [];
     let bestReason = "";
 
+    // Use provided targetDate or default to now (for next draw prediction)
+    const dateForZodiac = targetDate || new Date().toISOString();
+
     for (let n = 1; n <= 49; n++) {
-        const { score, strongestReason } = engine.getCompositeScore(n, referenceDraws);
+        // Pass dateForZodiac to getCompositeScore if needed, or just use it here for 'z'
+        // Actually getCompositeScore uses NUMBER_MAP internally for candidate properties like color.
+        // Color usually doesn't change with year (wave color is fixed for numbers).
+        // Zodiac changes.
+        
+        // We need to ensure getCompositeScore uses the correct zodiac for the candidate too if it relies on it.
+        // Looking at getCompositeScore:
+        // const cInfo = NUMBER_MAP[candidate]; 
+        // It uses cInfo.zodiac. This is WRONG if year is different.
+        
+        // We need to fix getCompositeScore as well.
+        const { score, strongestReason } = engine.getCompositeScore(n, referenceDraws, dateForZodiac);
+        
         if (strongestReason && !bestReason && score > 0) bestReason = strongestReason;
-        scores.push({ n, s: score, z: NUMBER_MAP[n].zodiac, reason: strongestReason });
+        
+        // Use dynamic zodiac for the result
+        const dynamicZodiac = getZodiacByYear(n, dateForZodiac);
+        scores.push({ n, s: score, z: dynamicZodiac, reason: strongestReason });
     }
 
     // 排序

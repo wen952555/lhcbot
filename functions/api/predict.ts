@@ -108,7 +108,7 @@ export async function onRequestPost(context: any) {
                 const pastHistory = historyData.slice(i + 1);
                 // 只有当有足够历史数据时才预测
                 if (pastHistory.length > 10) {
-                    const backtestPred = generateDeterministicPrediction(pastHistory);
+                    const backtestPred = generateDeterministicPrediction(pastHistory, targetDraw.date);
                     predictionHistory.push({
                         drawNumber: targetDraw.drawNumber,
                         prediction: backtestPred,
