@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Sparkles, BrainCircuit } from 'lucide-react';
+import { Sparkles, BrainCircuit, BarChart3 } from 'lucide-react';
 import { PredictionResult } from '../types.ts';
 import Ball from './Ball.tsx';
 
@@ -31,7 +31,7 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, isLo
       {isLoading && (
         <div className="py-8 flex flex-col items-center justify-center text-center">
           <div className="w-10 h-10 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin mb-3"></div>
-          <p className="text-amber-500/80 text-xs animate-pulse">正在进行数据计算...</p>
+          <p className="text-amber-500/80 text-xs animate-pulse">正在进行全量数据回测与统计分析...</p>
         </div>
       )}
 
@@ -48,25 +48,38 @@ export const PredictionCard: React.FC<PredictionCardProps> = ({ prediction, isLo
             </div>
           </div>
 
-          <div className="bg-slate-800/50 p-3 rounded-xl border border-white/5">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-xs text-slate-400">算法信心指数</span>
-              <span className="text-xs font-bold text-amber-400">{prediction.confidence}%</span>
+          <div className="bg-slate-800/50 p-3 rounded-xl border border-white/5 relative overflow-hidden">
+            {/* 装饰背景 */}
+            <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/5 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs text-slate-400 flex items-center gap-1">
+                <BarChart3 className="w-3 h-3" />
+                算法信心指数
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded text-[9px] font-medium">
+                    自动回测优化
+                </span>
+                <span className="text-xs font-bold text-amber-400">{prediction.confidence}%</span>
+              </div>
             </div>
-            <div className="w-full bg-slate-700 h-1.5 rounded-full mb-3">
+            
+            <div className="w-full bg-slate-700 h-1.5 rounded-full mb-3 overflow-hidden">
               <div 
-                className="bg-amber-500 h-1.5 rounded-full" 
+                className="bg-gradient-to-r from-amber-600 to-amber-400 h-1.5 rounded-full transition-all duration-1000 ease-out" 
                 style={{ width: `${prediction.confidence}%` }}
               ></div>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed opacity-90">
+            
+            <p className="text-[11px] text-slate-300 leading-relaxed opacity-90 border-l-2 border-amber-500/30 pl-2">
               {prediction.reasoning}
             </p>
           </div>
 
           <button 
             onClick={onPredict}
-            className="w-full mt-4 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+            className="w-full mt-4 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs font-medium py-3 rounded-xl transition-colors flex items-center justify-center gap-2 border border-slate-600/50"
           >
             <Sparkles className="w-3 h-3" />
             重新预测
