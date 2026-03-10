@@ -47,6 +47,25 @@ const TARGET_YEAR = 2026; // 当前 NUMBER_MAP 配置对应的年份
 // 用于预测展示的日期（强制使用未来/马年配置，设为2026春节后）
 export const PREDICTION_DATE = '2026-02-18';
 
+const LUNAR_NEW_YEARS: Record<number, string> = {
+  2015: '02-19',
+  2016: '02-08',
+  2017: '01-28',
+  2018: '02-16',
+  2019: '02-05',
+  2020: '01-25',
+  2021: '02-12',
+  2022: '02-01',
+  2023: '01-22',
+  2024: '02-10',
+  2025: '01-29',
+  2026: '02-17',
+  2027: '02-06',
+  2028: '01-26',
+  2029: '02-13',
+  2030: '02-03'
+};
+
 /**
  * 核心逻辑：根据开奖日期动态修正生肖
  * 
@@ -63,21 +82,16 @@ export const getZodiacByYear = (num: number, dateStr?: string): string => {
   let year = parseInt(targetDateStr.substring(0, 4));
   if (isNaN(year)) return NUMBER_MAP[num]?.zodiac || '';
 
-  // 2. 农历年份修正
-  const month = parseInt(targetDateStr.substring(5, 7));
-  const day = parseInt(targetDateStr.substring(8, 10));
-
-  // 针对2026年春节 (2月17日) 的特殊处理
-  if (year === 2026) {
-    // 2月17日之前属于蛇年 (2025)
-    if (!isNaN(month) && (month < 2 || (month === 2 && !isNaN(day) && day < 17))) {
+  // 2. 农历年份修正 (精确到天)
+  const monthDay = targetDateStr.substring(5, 10); // "MM-DD"
+  const lnyDate = LUNAR_NEW_YEARS[year];
+  
+  if (lnyDate && monthDay < lnyDate) {
+      // 在当年的春节之前，属于上一个农历年
       year -= 1;
-    }
-  } else {
-    // 其他年份简单算法: 1月份通常属于上一年
-    if (!isNaN(month) && month === 1) {
-      year -= 1; 
-    }
+  } else if (!lnyDate && monthDay < '02-04') {
+      // 如果没有配置该年份的春节，使用立春(大致2月4日)作为兜底
+      year -= 1;
   }
 
   // 如果年份 >= 2026，直接用现在的表 (且仅当确实是2026之后的数据)
@@ -87,7 +101,6 @@ export const getZodiacByYear = (num: number, dateStr?: string): string => {
   const yearOffset = TARGET_YEAR - year; // 例如 2025年，差1
   
   // 4. 计算当前号码在马年序列中的基础索引 (1号是Index 0)
-  // num 1 -> index 0
   const baseIndex = (num - 1) % 12;
   
   // 5. 加上年份偏移，取模得到当时的生肖
