@@ -1,5 +1,6 @@
 
 import { generateDeterministicPrediction } from '../analysis';
+import { PREDICTION_DATE } from '../../constants';
 
 export async function onRequestPost(context: any) {
   const { request, env } = context;
@@ -14,7 +15,7 @@ export async function onRequestPost(context: any) {
         const { results } = await env.DB.prepare(`
             SELECT * FROM lottery_draws 
             WHERE lottery_id = ? 
-            ORDER BY draw_number DESC 
+            ORDER BY CAST(draw_number AS INTEGER) DESC, draw_number DESC 
             LIMIT 500
         `).bind(lotteryId).all();
         
@@ -53,7 +54,7 @@ export async function onRequestPost(context: any) {
 
     // --- 如果没有预测或预测已过期，实时生成 (针对下期) ---
     if ((!prediction || isStale) && historyData.length > 0) {
-        const generated = generateDeterministicPrediction(historyData);
+        const generated = generateDeterministicPrediction(historyData, PREDICTION_DATE);
         const now = Date.now();
         prediction = {
             ...generated,
@@ -78,7 +79,7 @@ export async function onRequestPost(context: any) {
             SELECT draw_number, data, created_at 
             FROM prediction_history 
             WHERE lottery_id = ? 
-            ORDER BY draw_number DESC 
+            ORDER BY CAST(draw_number AS INTEGER) DESC, draw_number DESC 
             LIMIT 30
         `).bind(lotteryId).all();
 

@@ -1,5 +1,6 @@
 
 import { generateDeterministicPrediction } from '../analysis';
+import { PREDICTION_DATE } from '../../constants';
 
 // 定义彩种配置
 const LOTTERIES = [
@@ -120,7 +121,7 @@ async function doBatchViewInBot(env: any, chatId: number) {
             const { results } = await env.DB.prepare(`
                 SELECT * FROM lottery_draws 
                 WHERE lottery_id = ? 
-                ORDER BY draw_number DESC 
+                ORDER BY CAST(draw_number AS INTEGER) DESC, draw_number DESC 
                 LIMIT 10
             `).bind(lottery.id).all();
 
@@ -192,9 +193,14 @@ async function syncLotteryData(env: any, lottery: any): Promise<number> {
     const apiUrl = env[lottery.envKey];
     if (!apiUrl) throw new Error(`环境变量缺失: ${lottery.envKey}`);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
     const resp = await fetch(apiUrl, { 
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' } 
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
     
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     
@@ -258,7 +264,7 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
     const { results } = await env.DB.prepare(`
         SELECT * FROM lottery_draws 
         WHERE lottery_id = ? 
-        ORDER BY draw_number DESC 
+        ORDER BY CAST(draw_number AS INTEGER) DESC, draw_number DESC 
         LIMIT 500
     `).bind(lotteryId).all();
 
@@ -284,7 +290,7 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
         nextDrawNumber = `${historyData[0].drawNumber}_Next`;
     }
 
-    const prediction = generateDeterministicPrediction(historyData);
+    const prediction = generateDeterministicPrediction(historyData, PREDICTION_DATE);
     const jsonPrediction = JSON.stringify(prediction);
     const now = Date.now();
 

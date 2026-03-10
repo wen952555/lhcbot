@@ -6,7 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { generateDeterministicPrediction } from './functions/analysis.ts';
-import { LOTTERY_CONFIGS } from './constants.tsx';
+import { LOTTERY_CONFIGS, PREDICTION_DATE } from './constants.tsx';
 
 dotenv.config();
 
@@ -32,6 +32,9 @@ function setupDatabase() {
       PRIMARY KEY (lottery_id, draw_number)
     )
   `).run();
+
+  // Create indices for faster querying and sorting
+  db.prepare(`CREATE INDEX IF NOT EXISTS idx_lottery_draws_sort ON lottery_draws(lottery_id, CAST(draw_number AS INTEGER) DESC, draw_number DESC)`).run();
 
   // 2. Admin Predictions Table
   db.prepare(`
@@ -84,9 +87,14 @@ async function syncLotteryData(lotteryId: string) {
   console.log(`Syncing ${lotteryId} from ${apiUrl}...`);
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+
     const resp = await fetch(apiUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      signal: controller.signal
     });
+    clearTimeout(timeoutId);
 
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
@@ -167,11 +175,11 @@ app.post('/api/predict', async (req, res) => {
     const { lotteryId } = req.body;
     if (!lotteryId) return res.status(400).json({ error: 'Missing lotteryId' });
 
-    // Get History
+    // Get History (Robust sorting for numeric/string draw numbers)
     const historyRows = db.prepare(`
       SELECT * FROM lottery_draws
       WHERE lottery_id = ?
-      ORDER BY draw_number DESC
+      ORDER BY CAST(draw_number AS INTEGER) DESC, draw_number DESC
       LIMIT 500
     `).all(lotteryId) as any[];
 
@@ -206,7 +214,8 @@ app.post('/api/predict', async (req, res) => {
 
     // Generate New Prediction if needed
     if ((!prediction || isStale) && historyData.length > 0) {
-      const generated = generateDeterministicPrediction(historyData);
+      // Use PREDICTION_DATE to ensure server's zodiac logic matches UI's display logic
+      const generated = generateDeterministicPrediction(historyData, PREDICTION_DATE);
       const now = Date.now();
       prediction = {
         ...generated,
@@ -228,7 +237,7 @@ app.post('/api/predict', async (req, res) => {
       SELECT draw_number, data, created_at
       FROM prediction_history
       WHERE lottery_id = ?
-      ORDER BY draw_number DESC
+      ORDER BY CAST(draw_number AS INTEGER) DESC, draw_number DESC
       LIMIT 30
     `).all(lotteryId) as any[];
 

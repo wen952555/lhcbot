@@ -304,15 +304,13 @@ class MultiLagEngine {
         toVal: any,
         categoriesCount: number // e.g., 12 for zodiac, 10 for tail
     ): { count: number, total: number, prob: number } {
-        const row = matrixSet[lag]?.[fromVal];
-        if (!row) return { count: 0, total: 0, prob: 0 };
-        
+        const row = matrixSet[lag]?.[fromVal] || {};
         const count = row[toVal] || 0;
         const total = Object.values(row).reduce((a: any, b: any) => a + b, 0) as number;
         
         // 拉普拉斯平滑 (Laplace Smoothing)
         // 避免小样本下出现 100% 或 0% 的极端概率
-        // 例如：1次出现/总共1次 -> (1+1)/(1+12) = 2/13 = 15.3% (而不是100%)
+        // 如果该条件从未出现过(total=0)，概率将平滑为 1/categoriesCount (即随机概率)
         const prob = (count + 1) / (total + categoriesCount);
         
         return { count, total, prob };
