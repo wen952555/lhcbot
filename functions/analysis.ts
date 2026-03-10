@@ -56,21 +56,21 @@ class MultiLagEngine {
 
     // 4. 动态权重 (默认值，会被回测覆盖)
     weights = {
-        freq: 20,          // 基础热度 (大幅提升权重)
+        freq: 15,          // 基础热度 (降低，避免追热过度)
         recentTrend: 15,   // 近期走势
-        omission: -5,      // 遗漏惩罚 (默认杀冷号)
-        lagBase: 5.0,      // 滞后规律基础分
-        lagPattern: 25.0,  // 发现强规律时的额外加分
-        flatStrategy: 10,  // 平特
-        killPenalty: -200, // 绝杀
-        overheatPenalty: -40, // 过热惩罚
+        omission: -2,      // 遗漏惩罚 (轻微杀冷号，避免误杀)
+        lagBase: 10.0,     // 滞后规律基础分
+        lagPattern: 30.0,  // 发现强规律时的额外加分
+        flatStrategy: 15,  // 平特
+        killPenalty: -50,  // 绝杀惩罚 (降低，避免误杀)
+        overheatPenalty: -20, // 过热惩罚
         
         // 维度权重
-        oddEvenBase: 3.0,
-        bigSmallBase: 3.0,
-        colorBase: 4.0,
-        sumOddEvenBase: 2.0,
-        sumBigSmallBase: 2.0
+        oddEvenBase: 5.0,
+        bigSmallBase: 5.0,
+        colorBase: 8.0,
+        sumOddEvenBase: 3.0,
+        sumBigSmallBase: 3.0
     };
 
     // 5. 统计指标
@@ -81,7 +81,8 @@ class MultiLagEngine {
         this.history = history;
         this.initStats();
         this.processFullHistory();
-        this.performAutoBacktest(); // 执行自动回测调整权重
+        // 移除 performAutoBacktest，因为它会导致数据泄露（在训练集上测试）
+        // 并且小样本下的回测容易导致过拟合，使用经验静态权重更稳健
     }
 
     private initStats() {
@@ -300,14 +301,21 @@ class MultiLagEngine {
         matrixSet: any, 
         lag: number, 
         fromVal: any, 
-        toVal: any
+        toVal: any,
+        categoriesCount: number // e.g., 12 for zodiac, 10 for tail
     ): { count: number, total: number, prob: number } {
         const row = matrixSet[lag]?.[fromVal];
         if (!row) return { count: 0, total: 0, prob: 0 };
         
         const count = row[toVal] || 0;
         const total = Object.values(row).reduce((a: any, b: any) => a + b, 0) as number;
-        return { count, total, prob: total > 0 ? count / total : 0 };
+        
+        // 拉普拉斯平滑 (Laplace Smoothing)
+        // 避免小样本下出现 100% 或 0% 的极端概率
+        // 例如：1次出现/总共1次 -> (1+1)/(1+12) = 2/13 = 15.3% (而不是100%)
+        const prob = (count + 1) / (total + categoriesCount);
+        
+        return { count, total, prob };
     }
 
     // --- 核心评分系统 ---
@@ -358,14 +366,14 @@ class MultiLagEngine {
             const lagDecay = 1 / Math.pow(lag, 0.4); 
 
             // --- A. 生肖规律 ---
-            const zStats = this.getTransitionStats(this.matrices.zodiac, lag, prevZodiac, candidateZodiac);
+            const zStats = this.getTransitionStats(this.matrices.zodiac, lag, prevZodiac, candidateZodiac, 12);
             
-            // 绝杀
-            if (zStats.total > 25 && zStats.count === 0) {
+            // 绝杀 (降低门槛，因为平滑后概率不会是0)
+            if (zStats.total > 20 && zStats.count === 0) {
                 totalScore += this.weights.killPenalty * lagDecay;
             } 
-            // 强规律
-            else if (zStats.prob > 0.20) {
+            // 强规律 (平滑后，12分类的期望概率是 8.3%，>15% 算强规律)
+            else if (zStats.prob > 0.15) {
                 const boost = zStats.prob * 100 * this.weights.lagPattern * lagDecay;
                 totalScore += boost;
                 reasons.push({ lag, type: '生肖', prob: zStats.prob, val: `${prevZodiac}->${candidateZodiac}` });
@@ -374,35 +382,35 @@ class MultiLagEngine {
             }
 
             // --- B. 尾数规律 ---
-            const tStats = this.getTransitionStats(this.matrices.tail, lag, prevNum % 10, candidate % 10);
+            const tStats = this.getTransitionStats(this.matrices.tail, lag, prevNum % 10, candidate % 10, 10);
             if (tStats.total > 20 && tStats.count === 0) {
                 totalScore += (this.weights.killPenalty / 2) * lagDecay; 
-            } else if (tStats.prob > 0.18) {
+            } else if (tStats.prob > 0.15) { // 10分类期望 10%
                 totalScore += tStats.prob * 80 * this.weights.lagPattern * lagDecay;
-                if (tStats.prob > 0.25) reasons.push({ lag, type: '尾数', prob: tStats.prob, val: `${prevNum%10}->${candidate%10}` });
+                if (tStats.prob > 0.20) reasons.push({ lag, type: '尾数', prob: tStats.prob, val: `${prevNum%10}->${candidate%10}` });
             } else {
                 totalScore += tStats.prob * 80 * this.weights.lagBase * lagDecay;
             }
 
             // --- C. 012路规律 ---
-            const mStats = this.getTransitionStats(this.matrices.mod3, lag, getMod3(prevNum), getMod3(candidate));
+            const mStats = this.getTransitionStats(this.matrices.mod3, lag, getMod3(prevNum), getMod3(candidate), 3);
             totalScore += mStats.prob * 40 * this.weights.lagBase * lagDecay;
             
             // --- D. 维度规律 ---
-            const oeStats = this.getTransitionStats(this.matrices.oddEven, lag, getOddEven(prevNum), getOddEven(candidate));
+            const oeStats = this.getTransitionStats(this.matrices.oddEven, lag, getOddEven(prevNum), getOddEven(candidate), 2);
             totalScore += oeStats.prob * 30 * this.weights.oddEvenBase * lagDecay;
             
-            const bsStats = this.getTransitionStats(this.matrices.bigSmall, lag, getBigSmall(prevNum), getBigSmall(candidate));
+            const bsStats = this.getTransitionStats(this.matrices.bigSmall, lag, getBigSmall(prevNum), getBigSmall(candidate), 2);
             totalScore += bsStats.prob * 30 * this.weights.bigSmallBase * lagDecay;
             
-            const cStats = this.getTransitionStats(this.matrices.color, lag, prevColor, cInfo.color);
+            const cStats = this.getTransitionStats(this.matrices.color, lag, prevColor, cInfo.color, 3);
             totalScore += cStats.prob * 40 * this.weights.colorBase * lagDecay;
             if (cStats.prob > 0.45) reasons.push({ lag, type: '波色', prob: cStats.prob, val: `${prevColor}->${cInfo.color}` });
             
-            const soeStats = this.getTransitionStats(this.matrices.sumOddEven, lag, getSumOddEven(prevNum), getSumOddEven(candidate));
+            const soeStats = this.getTransitionStats(this.matrices.sumOddEven, lag, getSumOddEven(prevNum), getSumOddEven(candidate), 2);
             totalScore += soeStats.prob * 20 * this.weights.sumOddEvenBase * lagDecay;
             
-            const sbsStats = this.getTransitionStats(this.matrices.sumBigSmall, lag, getSumBigSmall(prevNum), getSumBigSmall(candidate));
+            const sbsStats = this.getTransitionStats(this.matrices.sumBigSmall, lag, getSumBigSmall(prevNum), getSumBigSmall(candidate), 2);
             totalScore += sbsStats.prob * 20 * this.weights.sumBigSmallBase * lagDecay;
         }
 
