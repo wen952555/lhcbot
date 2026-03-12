@@ -318,7 +318,7 @@ class MultiLagEngine {
 
     // --- 核心评分系统 ---
     // 输入: 候选号码(使用当前马年映射), 参考历史(使用历史真实生肖)
-    getCompositeScore(candidate: number, referenceDraws: any[], targetDate?: string): { score: number, strongestReason: string } {
+    getCompositeScore(candidate: number, referenceDraws: any[], targetDate?: string): { score: number, strongestReason: string, maxProb: number } {
         const cInfo = NUMBER_MAP[candidate]; 
         if (!cInfo) return { score: 0, strongestReason: '' };
 
@@ -426,7 +426,7 @@ class MultiLagEngine {
         }
 
         // 整理最强理由
-        reasons.sort((a, b) => b.prob - a.prob);
+        reasons.sort((a, b) => b.prob - a.prob || a.lag - b.lag);
         let strongestReason = "";
         if (reasons.length > 0) {
             const r = reasons[0];
@@ -436,7 +436,7 @@ class MultiLagEngine {
             strongestReason = `统计: 历史热号 (频率${Math.round(this.globalFreq[candidate])})`;
         }
 
-        return { score: totalScore, strongestReason };
+        return { score: totalScore, strongestReason, maxProb: reasons.length > 0 ? reasons[0].prob : 0 };
     }
 }
 
@@ -451,35 +451,24 @@ export function generateDeterministicPrediction(history: any[], targetDate?: str
     // 获取用于分析的"过去几期"数据 (T-1, T-2... T-7)
     const referenceDraws = history.slice(0, MAX_LAG_SCAN + 1);
 
-    const scores: { n: number, s: number, z: string, reason: string }[] = [];
+    const scores: { n: number, s: number, z: string, reason: string, maxProb: number }[] = [];
     let bestReason = "";
 
     // Use provided targetDate or default to now (for next draw prediction)
     const dateForZodiac = targetDate || new Date().toISOString();
 
     for (let n = 1; n <= 49; n++) {
-        // Pass dateForZodiac to getCompositeScore if needed, or just use it here for 'z'
-        // Actually getCompositeScore uses NUMBER_MAP internally for candidate properties like color.
-        // Color usually doesn't change with year (wave color is fixed for numbers).
-        // Zodiac changes.
-        
-        // We need to ensure getCompositeScore uses the correct zodiac for the candidate too if it relies on it.
-        // Looking at getCompositeScore:
-        // const cInfo = NUMBER_MAP[candidate]; 
-        // It uses cInfo.zodiac. This is WRONG if year is different.
-        
-        // We need to fix getCompositeScore as well.
-        const { score, strongestReason } = engine.getCompositeScore(n, referenceDraws, dateForZodiac);
+        const { score, strongestReason, maxProb } = engine.getCompositeScore(n, referenceDraws, dateForZodiac);
         
         if (strongestReason && !bestReason && score > 0) bestReason = strongestReason;
         
         // Use dynamic zodiac for the result
         const dynamicZodiac = getZodiacByYear(n, dateForZodiac);
-        scores.push({ n, s: score, z: dynamicZodiac, reason: strongestReason });
+        scores.push({ n, s: score, z: dynamicZodiac, reason: strongestReason, maxProb });
     }
 
-    // 排序
-    scores.sort((a, b) => b.s - a.s);
+    // 稳定排序: 先按分数降序，分数相同时按号码升序
+    scores.sort((a, b) => b.s - a.s || a.n - b.n);
 
     // --- 提取策略 (Multi-Level Extraction) ---
     
@@ -494,7 +483,7 @@ export function generateDeterministicPrediction(history: any[], targetDate?: str
     });
 
     const topZodiacs = Object.entries(zodiacScores)
-        .sort((a, b) => b[1] - a[1])
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .slice(0, 6)
         .map(x => x[0]);
 
@@ -541,9 +530,9 @@ export function generateDeterministicPrediction(history: any[], targetDate?: str
         }
     });
 
-    const topTails = Object.entries(tailScores).sort((a,b)=>b[1]-a[1]).slice(0,4).map(x=>parseInt(x[0])).sort((a,b)=>a-b);
-    const topHeads = Object.entries(headScores).sort((a,b)=>b[1]-a[1]).slice(0,2).map(x=>parseInt(x[0])).sort((a,b)=>a-b);
-    const topColors = Object.entries(colorScores).sort((a,b)=>b[1]-a[1]).slice(0,2).map(x=>x[0]);
+    const topTails = Object.entries(tailScores).sort((a,b)=>b[1]-a[1] || parseInt(a[0])-parseInt(b[0])).slice(0,4).map(x=>parseInt(x[0])).sort((a,b)=>a-b);
+    const topHeads = Object.entries(headScores).sort((a,b)=>b[1]-a[1] || parseInt(a[0])-parseInt(b[0])).slice(0,2).map(x=>parseInt(x[0])).sort((a,b)=>a-b);
+    const topColors = Object.entries(colorScores).sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0])).slice(0,2).map(x=>x[0]);
 
     // 生成文案
     let reasoning = "多阶滞后全维扫描完成。";
@@ -556,14 +545,13 @@ export function generateDeterministicPrediction(history: any[], targetDate?: str
     }
 
     // 动态调整信心指数
-    let confidence = 50;
-    if (history.length < 10) {
-        confidence = 50 + history.length; 
-    } else if (history.length < 30) {
-        confidence = 60 + Math.floor(history.length / 2);
-    } else {
-        confidence = Math.min(99, 80 + Math.floor(history.length / 30));
-    }
+    // 基础分 50，历史长度贡献 30，规律强度贡献 20
+    const historyBonus = Math.min(30, Math.floor(history.length / 5));
+    const maxPatternProb = Math.max(...scores.map(x => x.maxProb));
+    const patternBonus = Math.min(20, Math.floor(maxPatternProb * 100 / 2));
+    
+    let confidence = 50 + historyBonus + patternBonus;
+    confidence = Math.min(99, confidence);
 
     return {
         zodiacs: topZodiacs,
