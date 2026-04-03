@@ -7,7 +7,7 @@ export interface DrawResult {
 }
 
 export interface PredictionResult {
-  zodiacs: string[];      // 推荐六肖
+  zodiacs: string[];      // 推荐平特三肖 (后端可能返回更多，前端取前3)
   numbers_18: number[];   // 推荐18码
   numbers_8: number[];    // 回测推荐8码 (高胜率精选)
   heads: number[];        // 推荐3个头数

@@ -80,21 +80,21 @@ export const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, is
          </div>
       </div>
 
-      {/* 核心六肖 (Highlight) */}
+      {/* 推荐平特三肖 (Highlight) */}
       <section className="glass-panel rounded-2xl p-5 relative overflow-hidden border-t-4 border-t-amber-500 shadow-xl shadow-amber-500/5">
         <div className="absolute -right-6 -top-6 opacity-[0.03] rotate-12">
             <Crown className="w-40 h-40 text-amber-900" />
         </div>
         <div className="flex items-center justify-between mb-5 relative z-10">
             <h3 className="text-amber-700 text-xs font-black flex items-center gap-1.5">
-                <Crown className="w-4 h-4 text-amber-500" /> 核心六肖
+                <Crown className="w-4 h-4 text-amber-500" /> 推荐平特三肖
             </h3>
             <div className="h-px flex-1 bg-gradient-to-r from-amber-200/50 to-transparent ml-3"></div>
         </div>
-        <div className="flex justify-between px-1 relative z-10">
-            {prediction.zodiacs.map((z, i) => (
+        <div className="flex justify-around px-1 relative z-10">
+            {prediction.zodiacs.slice(0, 3).map((z, i) => (
                 <div key={i} className="flex flex-col items-center gap-2 group">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/30 flex items-center justify-center text-white font-black text-xl border-b-4 border-amber-700 transition-transform group-hover:-translate-y-1">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 shadow-lg shadow-amber-500/30 flex items-center justify-center text-white font-black text-2xl border-b-4 border-amber-700 transition-transform group-hover:-translate-y-1">
                         {z}
                     </div>
                 </div>

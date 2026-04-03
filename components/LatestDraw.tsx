@@ -37,7 +37,7 @@ export const LatestDraw: React.FC<LatestDrawProps> = ({ draw, prediction, isLoad
       const p = prediction;
       const num = draw.specialNumber;
 
-      if (spZodiac && p.zodiacs.includes(spZodiac)) hitBadges.push("六肖中");
+      if (spZodiac && p.zodiacs.slice(0, 3).includes(spZodiac)) hitBadges.push("三肖中");
       if (p.numbers_18.includes(num)) hitBadges.push("18码中");
       if (spInfo && p.colors.includes(spInfo.color)) hitBadges.push("波色中");
       if (p.heads.includes(Math.floor(num / 10))) hitBadges.push("头数中");

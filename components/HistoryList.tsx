@@ -37,7 +37,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ history, predictions =
                const num = draw.specialNumber;
                
                // Check Zodiac Hit using the dynamic zodiac
-               if (p.zodiacs.includes(spZodiac)) hitBadges.push("六肖中");
+               if (p.zodiacs.slice(0, 3).includes(spZodiac)) hitBadges.push("三肖中");
                if (p.numbers_18 && p.numbers_18.includes(num)) hitBadges.push("18码中");
                if (p.colors && p.colors.includes(spInfo.color)) hitBadges.push("波色中");
                if (p.heads && p.heads.includes(Math.floor(num / 10))) hitBadges.push("头数中");

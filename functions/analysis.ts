@@ -472,7 +472,7 @@ export function generateDeterministicPrediction(history: any[], targetDate?: str
 
     // --- 提取策略 (Multi-Level Extraction) ---
     
-    // 1. 六肖提取 (Sum of Scores)
+    // 1. 生肖提取 (Sum of Scores)
     // 过滤掉被深度绝杀的号码 (分数极低的)
     const validScores = scores.filter(x => x.s > -100); 
     const zodiacScores: Record<string, number> = {};

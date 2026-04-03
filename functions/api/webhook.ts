@@ -306,7 +306,7 @@ async function generatePredictionMessage(env: any, lotteryId: string): Promise<{
 
     const msg = `✅ <b>[${lotteryName}] 第 ${nextDrawNumber} 期 预测</b>\n` +
                 `------------------------------\n` +
-                `🐯 <b>六肖</b>: ${prediction.zodiacs.length > 0 ? prediction.zodiacs.join(' ') : '分析中...'}\n` +
+                `🐯 <b>平特三肖</b>: ${prediction.zodiacs.length > 0 ? prediction.zodiacs.slice(0, 3).join(' ') : '分析中...'}\n` +
                 `⭐ <b>8码</b>: ${prediction.numbers_8.length > 0 ? prediction.numbers_8.join(',') : '分析中...'}\n` +
                 `🎱 <b>18码</b>: ${prediction.numbers_18.length > 0 ? prediction.numbers_18.join(',') : '分析中...'}\n` +
                 `🔢 <b>头数</b>: ${prediction.heads.join(', ')}头\n` +
