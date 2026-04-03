@@ -1,5 +1,5 @@
 
-import { NUMBER_MAP, ZODIAC_RELATIONS, NumberInfo, getZodiacByYear } from '../constants.tsx';
+import { NUMBER_MAP, ZODIAC_RELATIONS, NumberInfo, getZodiacByYear } from '../constants.ts';
 
 // --- 全局常量 ---
 const ZODIACS = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
@@ -543,6 +543,8 @@ export function generateDeterministicPrediction(history: any[], targetDate?: str
     } else if (history.length < 20) {
         reasoning = `【样本预警】历史数据稀缺(${history.length}期)，算法基于有限样本推演，请谨慎参考。`;
     }
+    
+    reasoning += " (注：彩票开奖为随机独立事件，历史统计规律仅供参考，不代表未来走势，请理性对待)";
 
     // 动态调整信心指数
     // 基础分 50，历史长度贡献 30，规律强度贡献 20

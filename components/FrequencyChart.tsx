@@ -2,7 +2,7 @@
 import React from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { DrawResult, NumberFrequency } from '../types.ts';
-import { NUMBER_MAP } from '../constants.tsx';
+import { NUMBER_MAP } from '../constants.ts';
 
 interface FrequencyChartProps {
   history: DrawResult[];

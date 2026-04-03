@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { getNumberColor, NUMBER_MAP, getZodiacByYear } from '../constants.tsx';
+import { getNumberColor, NUMBER_MAP, getZodiacByYear } from '../constants.ts';
 
 interface BallProps {
   number: number;

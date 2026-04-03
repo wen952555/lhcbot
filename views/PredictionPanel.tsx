@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Crown, Layers, Hash, Palette, BrainCircuit, Sparkles, Copy, Check, Info } from 'lucide-react';
 import { PredictionResult } from '../types.ts';
-import { COLOR_NAMES, PREDICTION_DATE } from '../constants.tsx';
+import { COLOR_NAMES, PREDICTION_DATE } from '../constants.ts';
 import Ball from '../components/Ball.tsx';
 
 interface PredictionPanelProps {

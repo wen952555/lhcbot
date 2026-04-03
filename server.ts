@@ -6,7 +6,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { generateDeterministicPrediction } from './functions/analysis.ts';
-import { LOTTERY_CONFIGS, PREDICTION_DATE } from './constants.tsx';
+import { LOTTERY_CONFIGS, PREDICTION_DATE } from './constants.ts';
 
 dotenv.config();
 

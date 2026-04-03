@@ -2,7 +2,7 @@
 import React from 'react';
 import { DrawResult, PredictionHistoryItem } from '../types.ts';
 import Ball from './Ball.tsx';
-import { NUMBER_MAP, getZodiacByYear } from '../constants.tsx';
+import { NUMBER_MAP, getZodiacByYear } from '../constants.ts';
 import { Trophy } from 'lucide-react';
 
 interface HistoryListProps {

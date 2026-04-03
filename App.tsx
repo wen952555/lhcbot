@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { DrawResult, LotteryConfig, PredictionResult, PredictionHistoryItem } from './types.ts';
-import { LOTTERY_CONFIGS } from './constants.tsx';
+import { LOTTERY_CONFIGS } from './constants.ts';
 import { fetchLotteryHistory } from './geminiService.ts';
 import { LotteryTabs } from './components/LotteryTabs.tsx';
 import { LatestDraw } from './components/LatestDraw.tsx';
