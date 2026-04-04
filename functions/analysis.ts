@@ -3,7 +3,7 @@ import { NUMBER_MAP, ZODIAC_RELATIONS, NumberInfo, getZodiacByYear } from '../co
 
 // --- 全局常量 ---
 const ZODIACS = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
-const MAX_LAG_SCAN = 7; // 向前扫描7期寻找规律
+const MAX_LAG_SCAN = 50; // 向前扫描50期寻找规律
 
 // --- 辅助函数 ---
 const getDigitSum = (num: number): number => {
@@ -29,6 +29,7 @@ interface MatrixSet {
     color: Record<number, Record<string, Record<string, number>>>;
     sumOddEven: Record<number, Record<string, Record<string, number>>>;
     sumBigSmall: Record<number, Record<string, Record<string, number>>>;
+    neighbor: Record<number, Record<string, Record<string, number>>>; // 邻号规律 (prevNum -> candidate is neighbor?)
 }
 
 // --- 核心分析引擎 ---
@@ -48,7 +49,8 @@ class MultiLagEngine {
         bigSmall: {},
         color: {},
         sumOddEven: {},
-        sumBigSmall: {}
+        sumBigSmall: {},
+        neighbor: {}
     };
 
     // 3. 平特关联
@@ -56,33 +58,35 @@ class MultiLagEngine {
 
     // 4. 动态权重 (默认值，会被回测覆盖)
     weights = {
-        freq: 15,          // 基础热度 (降低，避免追热过度)
-        recentTrend: 15,   // 近期走势
-        omission: -2,      // 遗漏惩罚 (轻微杀冷号，避免误杀)
-        lagBase: 10.0,     // 滞后规律基础分
-        lagPattern: 30.0,  // 发现强规律时的额外加分
-        flatStrategy: 15,  // 平特
-        killPenalty: -50,  // 绝杀惩罚 (降低，避免误杀)
-        overheatPenalty: -20, // 过热惩罚
+        freq: 12,          // 基础热度
+        recentTrend: 20,   // 近期走势 (Momentum)
+        omission: -3,      // 遗漏惩罚
+        reversion: 25,     // 极冷回补奖励
+        lagBase: 12.0,     // 滞后规律基础分
+        lagPattern: 35.0,  // 发现强规律时的额外加分
+        flatStrategy: 18,  // 平特
+        killPenalty: -40,  // 绝杀惩罚
+        overheatPenalty: -25, // 过热惩罚
         
         // 维度权重
-        oddEvenBase: 5.0,
-        bigSmallBase: 5.0,
-        colorBase: 8.0,
-        sumOddEvenBase: 3.0,
-        sumBigSmallBase: 3.0
+        oddEvenBase: 6.0,
+        bigSmallBase: 6.0,
+        colorBase: 10.0,
+        sumOddEvenBase: 4.0,
+        sumBigSmallBase: 4.0,
+        neighborBase: 8.0
     };
 
     // 5. 统计指标
     omission: Record<number, number> = {}; // 当前遗漏
     avgOmission: Record<number, number> = {}; // 平均遗漏
+    momentum: Record<number, number> = {}; // 近期动能 (近15期命中次数)
 
     constructor(history: any[]) {
         this.history = history;
         this.initStats();
         this.processFullHistory();
-        // 移除 performAutoBacktest，因为它会导致数据泄露（在训练集上测试）
-        // 并且小样本下的回测容易导致过拟合，使用经验静态权重更稳健
+        this.performAutoBacktest(); // 启用动态权重回测
     }
 
     private initStats() {
@@ -90,6 +94,7 @@ class MultiLagEngine {
             this.globalFreq[i] = 0;
             this.omission[i] = 0;
             this.avgOmission[i] = 0;
+            this.momentum[i] = 0;
         }
         ZODIACS.forEach(z => this.recentZodiacCounts[z] = 0);
 
@@ -103,6 +108,7 @@ class MultiLagEngine {
             this.matrices.color[lag] = {};
             this.matrices.sumOddEven[lag] = {};
             this.matrices.sumBigSmall[lag] = {};
+            this.matrices.neighbor[lag] = {};
         }
     }
 
@@ -148,13 +154,18 @@ class MultiLagEngine {
             }
         }
 
-        // --- 2. 统计近期热度 (判断过热) ---
-        for (let i = 0; i < Math.min(12, total); i++) {
+        // --- 2. 统计近期热度 (判断过热与动能) ---
+        for (let i = 0; i < Math.min(15, total); i++) {
             const num = parseInt(this.history[i].specialNumber);
             if (!isNaN(num)) {
-                // 使用 getZodiacByYear 还原当时的真实生肖
-                const zodiac = getZodiacByYear(num, this.history[i].date);
-                if (zodiac) this.recentZodiacCounts[zodiac]++;
+                // 动能统计
+                this.momentum[num]++;
+                
+                // 生肖过热统计 (仅看近12期)
+                if (i < 12) {
+                    const zodiac = getZodiacByYear(num, this.history[i].date);
+                    if (zodiac) this.recentZodiacCounts[zodiac]++;
+                }
             }
         }
 
@@ -193,6 +204,10 @@ class MultiLagEngine {
                             this.record(this.matrices.color, lag, prevColor, curColor);
                             this.record(this.matrices.sumOddEven, lag, getSumOddEven(prevNum), getSumOddEven(curNum));
                             this.record(this.matrices.sumBigSmall, lag, getSumBigSmall(prevNum), getSumBigSmall(curNum));
+                            
+                            // 邻号关系 (prevNum -> curNum 是否是邻号)
+                            const isNeighbor = Math.abs(prevNum - curNum) === 1 || Math.abs(prevNum - curNum) === 48 ? 'yes' : 'no';
+                            this.record(this.matrices.neighbor, lag, 'any', isNeighbor);
                         }
                     }
                 }
@@ -219,9 +234,9 @@ class MultiLagEngine {
 
     // --- 自动回测与权重调整 ---
     private performAutoBacktest() {
-        // 我们对最近 20 期进行快速回测，看哪些指标最准
-        const TEST_COUNT = Math.min(20, this.history.length - 10);
-        if (TEST_COUNT < 5) return;
+        // 我们对最近 50 期进行快速回测，看哪些指标最准
+        const TEST_COUNT = Math.min(50, this.history.length - 15);
+        if (TEST_COUNT < 10) return;
 
         let scores = {
             hotFreq: 0,    // 热号命中率
@@ -237,21 +252,16 @@ class MultiLagEngine {
             if (isNaN(targetNum)) continue;
 
             // 1. 检查是否是热号 (在当时看来)
-            // 简化处理：直接用全局频率近似，因为热度通常有惯性
-            if (this.globalFreq[targetNum] > (this.history.length / 49) * 1.2) {
+            if (this.globalFreq[targetNum] > (this.history.length / 49) * 1.1) {
                 scores.hotFreq++;
             }
 
             // 2. 检查是否是冷号回补
-            // 简化处理：如果当前遗漏值很大，说明它之前很久没出
-            // 注意：这里的 this.omission 是针对最新一期的，用来回测历史不太准
-            // 但我们可以看该号码的 avgOmission。如果它出现间隔通常很大，说明是冷号属性
-            if (this.avgOmission[targetNum] > 15) {
+            if (this.avgOmission[targetNum] > 12) {
                 scores.coldOmission++;
             }
 
             // 3. 检查规律 (Pattern)
-            // 简单取 Lag 1 的最高概率预测
             const prevDraw = this.history[i + 1];
             if (prevDraw) {
                 const prevNum = parseInt(prevDraw.specialNumber);
@@ -259,35 +269,37 @@ class MultiLagEngine {
                     const prevZodiac = getZodiacByYear(prevNum, prevDraw.date);
                     const targetZodiac = getZodiacByYear(targetNum, targetDraw.date);
                     if (prevZodiac && targetZodiac) {
-                        const stats = this.getTransitionStats(this.matrices.zodiac, 1, prevZodiac, targetZodiac);
-                        if (stats.prob > 0.15) scores.pattern++;
+                        const stats = this.getTransitionStats(this.matrices.zodiac, 1, prevZodiac, targetZodiac, 12);
+                        if (stats.prob > 0.12) scores.pattern++;
                     }
                 }
             }
         }
 
         // --- 动态调整权重 ---
-        // 如果热号命中率高 (> 30%)，大幅增加频率权重
-        if (scores.hotFreq / TEST_COUNT > 0.3) {
-            this.weights.freq = 30; // 提升热号权重
-            this.weights.omission = -10; // 加大冷号惩罚 (追热杀冷)
+        // 如果热号命中率高 (> 25%)，大幅增加频率权重
+        if (scores.hotFreq / TEST_COUNT > 0.25) {
+            this.weights.freq = 25; 
+            this.weights.recentTrend = 30;
+            this.weights.omission = -5; 
         } else {
-            // 如果热号不准，说明在走冷态，减少热号权重，减少冷号惩罚
-            this.weights.freq = 10;
-            this.weights.omission = 0;
+            // 如果热号不准，说明在走冷态，减少热号权重，增加冷号回补奖励
+            this.weights.freq = 8;
+            this.weights.recentTrend = 10;
+            this.weights.reversion = 40;
         }
 
         // 如果规律命中率高
-        if (scores.pattern / TEST_COUNT > 0.2) {
-            this.weights.lagPattern = 40; // 大幅提升规律权重
-            this.weights.lagBase = 10;
+        if (scores.pattern / TEST_COUNT > 0.15) {
+            this.weights.lagPattern = 45; 
+            this.weights.lagBase = 15;
         }
 
         // 平特策略调整
-        if (this.flatTailStats.probability > 0.6) {
-            this.weights.flatStrategy = 20;
+        if (this.flatTailStats.probability > 0.5) {
+            this.weights.flatStrategy = 25;
         } else {
-            this.weights.flatStrategy = 0;
+            this.weights.flatStrategy = 5;
         }
     }
 
@@ -336,15 +348,23 @@ class MultiLagEngine {
         const freqScore = (this.globalFreq[candidate] / (maxFreq || 1)) * this.weights.freq;
         totalScore += freqScore;
 
-        // B. 遗漏修正 (Omission)
-        // 如果遗漏值 > 平均遗漏 * 2，视为极冷号，扣分 (除非策略是追冷)
-        // 但如果遗漏值接近历史最大遗漏，可能会有"回补"预期，这里我们保守策略：杀冷
-        if (this.omission[candidate] > this.avgOmission[candidate] * 2) {
-            totalScore += this.weights.omission; // 默认为负分
+        // B. 遗漏修正 (Omission) & 极冷回补 (Reversion)
+        // 如果遗漏值 > 平均遗漏 * 2.5，视为极冷号，给予回补奖励
+        if (this.omission[candidate] > this.avgOmission[candidate] * 2.5 && this.omission[candidate] > 20) {
+            totalScore += this.weights.reversion;
+            reasons.push({ lag: 0, type: '极冷回补', prob: 0.8, val: `遗漏${this.omission[candidate]}期` });
+        } else if (this.omission[candidate] > this.avgOmission[candidate] * 1.5) {
+            totalScore += this.weights.omission; // 普通冷号，轻微惩罚
         }
+        
         // 如果是热号 (遗漏值很小)，加分
-        if (this.omission[candidate] < 5) {
-            totalScore += 5; // 近期热号奖励
+        if (this.omission[candidate] <= 3) {
+            totalScore += 8; // 近期热号奖励
+        }
+
+        // C. 动能得分 (Momentum)
+        if (this.momentum[candidate] >= 2) {
+            totalScore += this.momentum[candidate] * this.weights.recentTrend;
         }
 
         // --- 2. 遍历所有滞后周期 (Lag 1 ~ 7) ---
@@ -410,6 +430,15 @@ class MultiLagEngine {
             
             const sbsStats = this.getTransitionStats(this.matrices.sumBigSmall, lag, getSumBigSmall(prevNum), getSumBigSmall(candidate), 2);
             totalScore += sbsStats.prob * 20 * this.weights.sumBigSmallBase * lagDecay;
+            
+            // --- E. 邻号规律 ---
+            const isNeighbor = Math.abs(prevNum - candidate) === 1 || Math.abs(prevNum - candidate) === 48 ? 'yes' : 'no';
+            const nStats = this.getTransitionStats(this.matrices.neighbor, lag, 'any', isNeighbor, 2);
+            // 邻号的自然概率大约是 2/49 ≈ 4%
+            if (isNeighbor === 'yes' && nStats.prob > 0.08) {
+                totalScore += nStats.prob * 50 * this.weights.neighborBase * lagDecay;
+                if (nStats.prob > 0.12) reasons.push({ lag, type: '邻号', prob: nStats.prob, val: `跟随${prevNum}` });
+            }
         }
 
         // 3. 平特关联 (只看 T-1)
@@ -430,8 +459,12 @@ class MultiLagEngine {
         let strongestReason = "";
         if (reasons.length > 0) {
             const r = reasons[0];
-            const gapDesc = r.lag === 1 ? "上期" : `隔${r.lag-1}期`;
-            strongestReason = `规律: ${gapDesc}${r.type}转${r.val} (概率${Math.round(r.prob*100)}%)`;
+            if (r.type === '极冷回补') {
+                strongestReason = `统计: ${r.type} (${r.val})`;
+            } else {
+                const gapDesc = r.lag === 1 ? "上期" : `隔${r.lag-1}期`;
+                strongestReason = `规律: ${gapDesc}${r.type}转${r.val} (概率${Math.round(r.prob*100)}%)`;
+            }
         } else if (freqScore > 15) {
             strongestReason = `统计: 历史热号 (频率${Math.round(this.globalFreq[candidate])})`;
         }
@@ -472,15 +505,30 @@ export function generateDeterministicPrediction(history: any[], targetDate?: str
 
     // --- 提取策略 (Multi-Level Extraction) ---
     
-    // 1. 生肖提取 (Sum of Scores)
+    // 1. 生肖提取 (基于生肖内最强号码的得分)
     // 过滤掉被深度绝杀的号码 (分数极低的)
     const validScores = scores.filter(x => x.s > -100); 
-    const zodiacScores: Record<string, number> = {};
+    const zodiacNumberScores: Record<string, number[]> = {};
     
     validScores.forEach(({ s, z }) => {
-        // 只有正向分值才贡献给生肖榜
-        if (s > 0) zodiacScores[z] = (zodiacScores[z] || 0) + s; 
+        if (!zodiacNumberScores[z]) zodiacNumberScores[z] = [];
+        zodiacNumberScores[z].push(s);
     });
+
+    const zodiacScores: Record<string, number> = {};
+    for (const [z, sList] of Object.entries(zodiacNumberScores)) {
+        // 降序排列该生肖下的所有号码得分
+        sList.sort((a, b) => b - a);
+        // 取前两名最高分的平均值作为该生肖的得分，避免被大量平庸正分号码拉高
+        if (sList.length > 0) {
+            const top1 = sList[0];
+            const top2 = sList.length > 1 ? sList[1] : 0;
+            // 如果最高分是负数，生肖得分也是负数
+            zodiacScores[z] = top1 > 0 ? (top1 * 0.7 + top2 * 0.3) : top1;
+        } else {
+            zodiacScores[z] = -999;
+        }
+    }
 
     const topZodiacs = Object.entries(zodiacScores)
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))

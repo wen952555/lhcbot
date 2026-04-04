@@ -44,7 +44,8 @@ export async function onRequestPost(context: any) {
             // [关键修复] 缓存过期检查
             if (historyData.length > 0) {
                 const lastDrawTime = historyData[0].createdAt || 0;
-                if (prediction.timestamp < lastDrawTime) {
+                // 强制算法版本更新：如果缓存时间早于当前时间减去 1 分钟，则视为过期
+                if (prediction.timestamp < lastDrawTime || prediction.timestamp < Date.now() - 60000) {
                     isStale = true;
                     prediction = null; // 标记为失效，触发下方重新生成
                 }
@@ -90,12 +91,11 @@ export async function onRequestPost(context: any) {
         }));
     }
 
-    // --- [新增] 实时回测补全 ---
-    // 如果数据库中没有足够的历史预测记录（例如新系统），
-    // 我们实时计算最近 10 期的预测结果，以便前端展示战绩。
-    const BACKTEST_COUNT = 10;
-    if (predictionHistory.length < BACKTEST_COUNT && historyData.length > BACKTEST_COUNT + 10) {
-        const existingDraws = new Set(predictionHistory.map(p => p.drawNumber));
+    // --- [新增] 实时回测补全与更新 ---
+    // 强制使用最新算法重新计算最近 15 期的回测结果，以便前端展示最新算法的战绩。
+    const BACKTEST_COUNT = 15;
+    if (historyData.length > BACKTEST_COUNT + 10) {
+        const newPredictionHistory: any[] = [];
         
         // 对最近的 BACKTEST_COUNT 期进行回测
         // i = 0 是最新一期。我们要预测 history[0]，需要用 history.slice(1)
@@ -104,25 +104,32 @@ export async function onRequestPost(context: any) {
             const targetDraw = historyData[i];
             if (!targetDraw) continue;
 
-            if (!existingDraws.has(targetDraw.drawNumber)) {
-                // 使用该期之后的数据作为"历史"进行预测
-                const pastHistory = historyData.slice(i + 1);
-                // 只有当有足够历史数据时才预测
-                if (pastHistory.length > 10) {
-                    const backtestPred = generateDeterministicPrediction(pastHistory, targetDraw.date);
-                    predictionHistory.push({
-                        drawNumber: targetDraw.drawNumber,
-                        prediction: backtestPred,
-                        timestamp: Date.now(), // 标记为实时计算
-                        isBacktest: true // 标记为回测数据
-                    });
-                }
+            // 使用该期之后的数据作为"历史"进行预测
+            const pastHistory = historyData.slice(i + 1);
+            // 只有当有足够历史数据时才预测
+            if (pastHistory.length > 10) {
+                const backtestPred = generateDeterministicPrediction(pastHistory, targetDraw.date);
+                newPredictionHistory.push({
+                    drawNumber: targetDraw.drawNumber,
+                    prediction: backtestPred,
+                    timestamp: Date.now(), // 标记为实时计算
+                    isBacktest: true // 标记为回测数据
+                });
             }
         }
+        
+        // 合并旧的历史记录 (保留 15 期之前的真实记录)
+        const newDrawNumbers = new Set(newPredictionHistory.map(p => p.drawNumber));
+        for (const oldPred of predictionHistory) {
+            if (!newDrawNumbers.has(oldPred.drawNumber)) {
+                newPredictionHistory.push(oldPred);
+            }
+        }
+        
+        predictionHistory = newPredictionHistory;
+
         // 重新排序
         predictionHistory.sort((a, b) => {
-            // 简单的字符串比较可能不准确，但在这种上下文中通常足够
-            // 更严谨的做法是转 BigInt 比较，或者依赖 historyData 的顺序
             return b.drawNumber.localeCompare(a.drawNumber, undefined, { numeric: true });
         });
     }
