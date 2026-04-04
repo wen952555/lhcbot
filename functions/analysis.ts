@@ -246,13 +246,15 @@ class MultiLagEngine {
         };
 
         // 模拟回测
+        const avgFreq = Object.values(this.globalFreq).reduce((a, b) => a + b, 0) / 49;
+
         for (let i = 0; i < TEST_COUNT; i++) {
             const targetDraw = this.history[i];
             const targetNum = parseInt(targetDraw.specialNumber);
             if (isNaN(targetNum)) continue;
 
             // 1. 检查是否是热号 (在当时看来)
-            if (this.globalFreq[targetNum] > (this.history.length / 49) * 1.1) {
+            if (this.globalFreq[targetNum] > avgFreq * 1.1) {
                 scores.hotFreq++;
             }
 
@@ -522,7 +524,7 @@ export function generateDeterministicPrediction(history: any[], targetDate?: str
         // 取前两名最高分的平均值作为该生肖的得分，避免被大量平庸正分号码拉高
         if (sList.length > 0) {
             const top1 = sList[0];
-            const top2 = sList.length > 1 ? sList[1] : 0;
+            const top2 = sList.length > 1 ? sList[1] : top1;
             // 如果最高分是负数，生肖得分也是负数
             zodiacScores[z] = top1 > 0 ? (top1 * 0.7 + top2 * 0.3) : top1;
         } else {
@@ -579,7 +581,7 @@ export function generateDeterministicPrediction(history: any[], targetDate?: str
     });
 
     const topTails = Object.entries(tailScores).sort((a,b)=>b[1]-a[1] || parseInt(a[0])-parseInt(b[0])).slice(0,4).map(x=>parseInt(x[0])).sort((a,b)=>a-b);
-    const topHeads = Object.entries(headScores).sort((a,b)=>b[1]-a[1] || parseInt(a[0])-parseInt(b[0])).slice(0,2).map(x=>parseInt(x[0])).sort((a,b)=>a-b);
+    const topHeads = Object.entries(headScores).sort((a,b)=>b[1]-a[1] || parseInt(a[0])-parseInt(b[0])).slice(0,3).map(x=>parseInt(x[0])).sort((a,b)=>a-b);
     const topColors = Object.entries(colorScores).sort((a,b)=>b[1]-a[1] || a[0].localeCompare(b[0])).slice(0,2).map(x=>x[0]);
 
     // 生成文案

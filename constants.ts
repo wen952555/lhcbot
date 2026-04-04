@@ -103,8 +103,8 @@ export const getZodiacByYear = (num: number, dateStr?: string): string => {
   // 4. 计算当前号码在马年序列中的基础索引 (1号是Index 0)
   const baseIndex = (num - 1) % 12;
   
-  // 5. 加上年份偏移，取模得到当时的生肖
-  const finalIndex = (baseIndex + yearOffset) % 12;
+  // 5. 加上年份偏移，取模得到当时的生肖 (处理负数取模)
+  const finalIndex = ((baseIndex + yearOffset) % 12 + 12) % 12;
   
   return ZODIAC_SEQ[finalIndex];
 };
