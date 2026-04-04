@@ -50,6 +50,13 @@ const App: React.FC = () => {
     loadData();
     setShowHistory(false);
     setShowStats(false);
+
+    // 设置自动刷新（每 60 秒自动拉取一次最新数据）
+    const intervalId = setInterval(() => {
+      loadData();
+    }, 60000);
+
+    return () => clearInterval(intervalId);
   }, [loadData]);
 
   const getNextDrawId = () => {
