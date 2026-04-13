@@ -3,7 +3,7 @@ import { NUMBER_MAP, ZODIAC_RELATIONS, NumberInfo, getZodiacByYear } from '../co
 
 // --- 全局常量 ---
 const ZODIACS = ['鼠', '牛', '虎', '兔', '龙', '蛇', '马', '羊', '猴', '鸡', '狗', '猪'];
-const MAX_LAG_SCAN = 50; // 向前扫描50期寻找规律
+const MAX_LAG_SCAN = 15; // 降低扫描深度至15期，过滤深层噪音，提高近期规律权重
 
 // --- 辅助函数 ---
 const getDigitSum = (num: number): number => {
@@ -56,25 +56,25 @@ class MultiLagEngine {
     // 3. 平特关联
     flatTailStats = { hitCount: 0, totalCount: 0, probability: 0 };
 
-    // 4. 动态权重 (默认值，会被回测覆盖)
+    // 4. 优化后的静态权重矩阵 (避免动态回测的数据泄露和权重剧烈震荡)
     weights = {
-        freq: 12,          // 基础热度
-        recentTrend: 20,   // 近期走势 (Momentum)
-        omission: -3,      // 遗漏惩罚
-        reversion: 25,     // 极冷回补奖励
-        lagBase: 12.0,     // 滞后规律基础分
-        lagPattern: 35.0,  // 发现强规律时的额外加分
-        flatStrategy: 18,  // 平特
-        killPenalty: -40,  // 绝杀惩罚
-        overheatPenalty: -25, // 过热惩罚
+        freq: 15,          // 基础热度
+        recentTrend: 25,   // 近期走势 (Momentum)
+        omission: -5,      // 遗漏惩罚
+        reversion: 35,     // 极冷回补奖励
+        lagBase: 15.0,     // 滞后规律基础分
+        lagPattern: 45.0,  // 发现强规律时的额外加分
+        flatStrategy: 10,  // 平特
+        killPenalty: -60,  // 绝杀惩罚
+        overheatPenalty: -30, // 过热惩罚
         
         // 维度权重
-        oddEvenBase: 6.0,
-        bigSmallBase: 6.0,
-        colorBase: 10.0,
-        sumOddEvenBase: 4.0,
-        sumBigSmallBase: 4.0,
-        neighborBase: 8.0
+        oddEvenBase: 5.0,
+        bigSmallBase: 5.0,
+        colorBase: 15.0,
+        sumOddEvenBase: 3.0,
+        sumBigSmallBase: 3.0,
+        neighborBase: 12.0
     };
 
     // 5. 统计指标
@@ -86,7 +86,7 @@ class MultiLagEngine {
         this.history = history;
         this.initStats();
         this.processFullHistory();
-        this.performAutoBacktest(); // 启用动态权重回测
+        // 移除 performAutoBacktest，改用经过优化的静态权重矩阵
     }
 
     private initStats() {
@@ -345,18 +345,20 @@ class MultiLagEngine {
         // --- 1. 统计学基础分 (权重最高) ---
         
         // A. 频率得分 (Frequency)
-        // 归一化频率: (freq / maxFreq) * weight
-        const maxFreq = Math.max(...Object.values(this.globalFreq));
-        const freqScore = (this.globalFreq[candidate] / (maxFreq || 1)) * this.weights.freq;
+        const avgFreq = Object.values(this.globalFreq).reduce((a, b) => a + b, 0) / 49;
+        const freqDiff = (this.globalFreq[candidate] - avgFreq) / (avgFreq || 1);
+        const freqScore = freqDiff * this.weights.freq;
         totalScore += freqScore;
 
         // B. 遗漏修正 (Omission) & 极冷回补 (Reversion)
-        // 如果遗漏值 > 平均遗漏 * 2.5，视为极冷号，给予回补奖励
         if (this.omission[candidate] > this.avgOmission[candidate] * 2.5 && this.omission[candidate] > 20) {
             totalScore += this.weights.reversion;
             reasons.push({ lag: 0, type: '极冷回补', prob: 0.8, val: `遗漏${this.omission[candidate]}期` });
-        } else if (this.omission[candidate] > this.avgOmission[candidate] * 1.5) {
-            totalScore += this.weights.omission; // 普通冷号，轻微惩罚
+        } else {
+            const omissionDiff = (this.omission[candidate] - this.avgOmission[candidate]) / (this.avgOmission[candidate] || 1);
+            if (omissionDiff > 0) {
+                totalScore += omissionDiff * this.weights.omission; // omission weight is negative
+            }
         }
         
         // 如果是热号 (遗漏值很小)，加分
@@ -369,7 +371,15 @@ class MultiLagEngine {
             totalScore += this.momentum[candidate] * this.weights.recentTrend;
         }
 
-        // --- 2. 遍历所有滞后周期 (Lag 1 ~ 7) ---
+        // 连庄惩罚 (特码连庄概率极低)
+        if (referenceDraws.length > 0) {
+            const lastNum = parseInt(referenceDraws[0].specialNumber);
+            if (candidate === lastNum) {
+                totalScore -= 40; 
+            }
+        }
+
+        // --- 2. 遍历所有滞后周期 ---
         for (let lag = 1; lag <= MAX_LAG_SCAN; lag++) {
             const drawIndex = lag - 1;
             if (drawIndex >= referenceDraws.length) break;
@@ -382,64 +392,64 @@ class MultiLagEngine {
             const prevColor = NUMBER_MAP[prevNum]?.color;
             if (!prevZodiac || !prevColor) continue;
 
-            // 基础权重衰减
-            const lagDecay = 1 / Math.pow(lag, 0.4); 
+            // 基础权重衰减 (使用更陡峭的指数级衰减，防止深层噪音淹没近期强信号)
+            const lagDecay = 1 / Math.pow(lag, 1.5); 
 
             // --- A. 生肖规律 ---
             const zStats = this.getTransitionStats(this.matrices.zodiac, lag, prevZodiac, candidateZodiac, 12);
-            
-            // 绝杀 (降低门槛，因为平滑后概率不会是0)
-            if (zStats.total > 20 && zStats.count === 0) {
+            const zExpected = 1 / 12;
+            const zDiff = zStats.prob - zExpected;
+            if (zStats.total > 15 && zStats.count === 0) {
                 totalScore += this.weights.killPenalty * lagDecay;
-            } 
-            // 强规律 (平滑后，12分类的期望概率是 8.3%，>15% 算强规律)
-            else if (zStats.prob > 0.15) {
-                const boost = zStats.prob * 100 * this.weights.lagPattern * lagDecay;
-                totalScore += boost;
-                reasons.push({ lag, type: '生肖', prob: zStats.prob, val: `${prevZodiac}->${candidateZodiac}` });
             } else {
-                totalScore += zStats.prob * 100 * this.weights.lagBase * lagDecay;
+                const weight = zDiff > zExpected * 0.5 ? this.weights.lagPattern : this.weights.lagBase;
+                totalScore += zDiff * 100 * weight * lagDecay;
+                if (zDiff > zExpected * 0.8) reasons.push({ lag, type: '生肖', prob: zStats.prob, val: `${prevZodiac}->${candidateZodiac}` });
             }
 
             // --- B. 尾数规律 ---
             const tStats = this.getTransitionStats(this.matrices.tail, lag, prevNum % 10, candidate % 10, 10);
-            if (tStats.total > 20 && tStats.count === 0) {
+            const tExpected = 1 / 10;
+            const tDiff = tStats.prob - tExpected;
+            if (tStats.total > 15 && tStats.count === 0) {
                 totalScore += (this.weights.killPenalty / 2) * lagDecay; 
-            } else if (tStats.prob > 0.15) { // 10分类期望 10%
-                totalScore += tStats.prob * 80 * this.weights.lagPattern * lagDecay;
-                if (tStats.prob > 0.20) reasons.push({ lag, type: '尾数', prob: tStats.prob, val: `${prevNum%10}->${candidate%10}` });
             } else {
-                totalScore += tStats.prob * 80 * this.weights.lagBase * lagDecay;
+                const weight = tDiff > tExpected * 0.5 ? this.weights.lagPattern : this.weights.lagBase;
+                totalScore += tDiff * 100 * weight * lagDecay;
+                if (tDiff > tExpected * 0.8) reasons.push({ lag, type: '尾数', prob: tStats.prob, val: `${prevNum%10}->${candidate%10}` });
             }
 
             // --- C. 012路规律 ---
             const mStats = this.getTransitionStats(this.matrices.mod3, lag, getMod3(prevNum), getMod3(candidate), 3);
-            totalScore += mStats.prob * 40 * this.weights.lagBase * lagDecay;
+            totalScore += (mStats.prob - 1/3) * 100 * this.weights.lagBase * lagDecay;
             
             // --- D. 维度规律 ---
             const oeStats = this.getTransitionStats(this.matrices.oddEven, lag, getOddEven(prevNum), getOddEven(candidate), 2);
-            totalScore += oeStats.prob * 30 * this.weights.oddEvenBase * lagDecay;
+            totalScore += (oeStats.prob - 1/2) * 100 * this.weights.oddEvenBase * lagDecay;
             
             const bsStats = this.getTransitionStats(this.matrices.bigSmall, lag, getBigSmall(prevNum), getBigSmall(candidate), 2);
-            totalScore += bsStats.prob * 30 * this.weights.bigSmallBase * lagDecay;
+            totalScore += (bsStats.prob - 1/2) * 100 * this.weights.bigSmallBase * lagDecay;
             
             const cStats = this.getTransitionStats(this.matrices.color, lag, prevColor, cInfo.color, 3);
-            totalScore += cStats.prob * 40 * this.weights.colorBase * lagDecay;
-            if (cStats.prob > 0.45) reasons.push({ lag, type: '波色', prob: cStats.prob, val: `${prevColor}->${cInfo.color}` });
+            const cExpected = cInfo.color === 'red' ? 17/49 : (cInfo.color === 'blue' ? 16/49 : 16/49);
+            const cDiff = cStats.prob - cExpected;
+            totalScore += cDiff * 100 * this.weights.colorBase * lagDecay;
+            if (cDiff > cExpected * 0.5) reasons.push({ lag, type: '波色', prob: cStats.prob, val: `${prevColor}->${cInfo.color}` });
             
             const soeStats = this.getTransitionStats(this.matrices.sumOddEven, lag, getSumOddEven(prevNum), getSumOddEven(candidate), 2);
-            totalScore += soeStats.prob * 20 * this.weights.sumOddEvenBase * lagDecay;
+            totalScore += (soeStats.prob - 1/2) * 100 * this.weights.sumOddEvenBase * lagDecay;
             
             const sbsStats = this.getTransitionStats(this.matrices.sumBigSmall, lag, getSumBigSmall(prevNum), getSumBigSmall(candidate), 2);
-            totalScore += sbsStats.prob * 20 * this.weights.sumBigSmallBase * lagDecay;
+            totalScore += (sbsStats.prob - 1/2) * 100 * this.weights.sumBigSmallBase * lagDecay;
             
             // --- E. 邻号规律 ---
             const isNeighbor = Math.abs(prevNum - candidate) === 1 || Math.abs(prevNum - candidate) === 48 ? 'yes' : 'no';
             const nStats = this.getTransitionStats(this.matrices.neighbor, lag, 'any', isNeighbor, 2);
-            // 邻号的自然概率大约是 2/49 ≈ 4%
-            if (isNeighbor === 'yes' && nStats.prob > 0.08) {
-                totalScore += nStats.prob * 50 * this.weights.neighborBase * lagDecay;
-                if (nStats.prob > 0.12) reasons.push({ lag, type: '邻号', prob: nStats.prob, val: `跟随${prevNum}` });
+            const nExpected = isNeighbor === 'yes' ? 2/49 : 47/49;
+            const nDiff = nStats.prob - nExpected;
+            if (isNeighbor === 'yes' && nDiff > 0) {
+                totalScore += nDiff * 100 * this.weights.neighborBase * lagDecay;
+                if (nDiff > nExpected * 1.0) reasons.push({ lag, type: '邻号', prob: nStats.prob, val: `跟随${prevNum}` });
             }
         }
 
@@ -447,7 +457,11 @@ class MultiLagEngine {
         if (referenceDraws.length > 0 && referenceDraws[0].numbers) {
             const prevTails = referenceDraws[0].numbers.map((n: any) => parseInt(n) % 10);
             if (prevTails.includes(candidate % 10)) {
-                totalScore += this.flatTailStats.probability * this.weights.flatStrategy;
+                const flatExpected = prevTails.length / 10;
+                const flatDiff = this.flatTailStats.probability - flatExpected;
+                if (flatDiff > 0) {
+                    totalScore += flatDiff * 100 * this.weights.flatStrategy;
+                }
             }
         }
 
@@ -521,12 +535,11 @@ export function generateDeterministicPrediction(history: any[], targetDate?: str
     for (const [z, sList] of Object.entries(zodiacNumberScores)) {
         // 降序排列该生肖下的所有号码得分
         sList.sort((a, b) => b - a);
-        // 取前两名最高分的平均值作为该生肖的得分，避免被大量平庸正分号码拉高
         if (sList.length > 0) {
-            const top1 = sList[0];
-            const top2 = sList.length > 1 ? sList[1] : top1;
-            // 如果最高分是负数，生肖得分也是负数
-            zodiacScores[z] = top1 > 0 ? (top1 * 0.7 + top2 * 0.3) : top1;
+            const avgScore = sList.reduce((a, b) => a + b, 0) / sList.length;
+            const topScore = sList[0];
+            // 综合考量最强号码和该生肖的整体平均分
+            zodiacScores[z] = topScore * 0.6 + avgScore * 0.4;
         } else {
             zodiacScores[z] = -999;
         }
