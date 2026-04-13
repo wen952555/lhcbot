@@ -17,12 +17,22 @@ const getOddEven = (num: number): string => num % 2 === 0 ? 'even' : 'odd';
 const getBigSmall = (num: number): string => num >= 25 ? 'big' : 'small';
 const getSumOddEven = (num: number): string => getDigitSum(num) % 2 === 0 ? 'even' : 'odd';
 const getSumBigSmall = (num: number): string => getDigitSum(num) >= 7 ? 'big' : 'small';
+const getHead = (num: number): number => Math.floor(num / 10);
+
+// 计算 Z-Score (标准分数)，用于衡量概率的统计显著性，自动惩罚小样本噪音
+const calculateZScore = (prob: number, expected: number, total: number): number => {
+    if (total <= 1) return 0; // 样本太小无统计意义
+    const variance = (expected * (1 - expected)) / total;
+    if (variance === 0) return 0;
+    return (prob - expected) / Math.sqrt(variance);
+};
 
 // --- 统计容器接口 ---
 interface MatrixSet {
     // [LagIndex][FromValue][ToValue] -> Count
     zodiac: Record<number, Record<string, Record<string, number>>>;
     tail: Record<number, Record<number, Record<number, number>>>;
+    head: Record<number, Record<number, Record<number, number>>>; // 新增头数矩阵
     mod3: Record<number, Record<number, Record<number, number>>>;
     oddEven: Record<number, Record<string, Record<string, number>>>;
     bigSmall: Record<number, Record<string, Record<string, number>>>;
@@ -44,6 +54,7 @@ class MultiLagEngine {
     matrices: MatrixSet = {
         zodiac: {},
         tail: {},
+        head: {},
         mod3: {},
         oddEven: {},
         bigSmall: {},
@@ -56,25 +67,17 @@ class MultiLagEngine {
     // 3. 平特关联
     flatTailStats = { hitCount: 0, totalCount: 0, probability: 0 };
 
-    // 4. 优化后的静态权重矩阵 (避免动态回测的数据泄露和权重剧烈震荡)
+    // 4. 优化后的静态权重矩阵 (引入 Z-Score 标准分模型)
     weights = {
         freq: 15,          // 基础热度
         recentTrend: 25,   // 近期走势 (Momentum)
         omission: -5,      // 遗漏惩罚
         reversion: 35,     // 极冷回补奖励
-        lagBase: 15.0,     // 滞后规律基础分
-        lagPattern: 45.0,  // 发现强规律时的额外加分
+        zScoreBase: 12.0,  // Z-Score 基础乘数 (替代原有的 lagBase/lagPattern)
+        macroOmission: 4.0,// 宏观遗漏补偿 (生肖/波色整体遗漏)
         flatStrategy: 10,  // 平特
         killPenalty: -60,  // 绝杀惩罚
         overheatPenalty: -30, // 过热惩罚
-        
-        // 维度权重
-        oddEvenBase: 5.0,
-        bigSmallBase: 5.0,
-        colorBase: 15.0,
-        sumOddEvenBase: 3.0,
-        sumBigSmallBase: 3.0,
-        neighborBase: 12.0
     };
 
     // 5. 统计指标
@@ -198,6 +201,7 @@ class MultiLagEngine {
                         if (prevZodiac && curColor && prevColor) {
                             this.record(this.matrices.zodiac, lag, prevZodiac, curZodiac);
                             this.record(this.matrices.tail, lag, prevNum % 10, curNum % 10);
+                            this.record(this.matrices.head, lag, getHead(prevNum), getHead(curNum));
                             this.record(this.matrices.mod3, lag, getMod3(prevNum), getMod3(curNum));
                             this.record(this.matrices.oddEven, lag, getOddEven(prevNum), getOddEven(curNum));
                             this.record(this.matrices.bigSmall, lag, getBigSmall(prevNum), getBigSmall(curNum));
@@ -379,6 +383,14 @@ class MultiLagEngine {
             }
         }
 
+        // --- 1.5 宏观遗漏补偿 (Zodiac/Color) ---
+        if (zOmission[candidateZodiac] > 4) {
+            totalScore += (zOmission[candidateZodiac] - 4) * this.weights.macroOmission;
+        }
+        if (cOmission[cInfo.color] > 2) {
+            totalScore += (cOmission[cInfo.color] - 2) * this.weights.macroOmission * 1.5;
+        }
+
         // --- 2. 遍历所有滞后周期 ---
         for (let lag = 1; lag <= MAX_LAG_SCAN; lag++) {
             const drawIndex = lag - 1;
@@ -398,58 +410,63 @@ class MultiLagEngine {
             // --- A. 生肖规律 ---
             const zStats = this.getTransitionStats(this.matrices.zodiac, lag, prevZodiac, candidateZodiac, 12);
             const zExpected = 1 / 12;
-            const zDiff = zStats.prob - zExpected;
+            const zScoreVal = calculateZScore(zStats.prob, zExpected, zStats.total);
+            
             if (zStats.total > 15 && zStats.count === 0) {
                 totalScore += this.weights.killPenalty * lagDecay;
             } else {
-                const weight = zDiff > zExpected * 0.5 ? this.weights.lagPattern : this.weights.lagBase;
-                totalScore += zDiff * 100 * weight * lagDecay;
-                if (zDiff > zExpected * 0.8) reasons.push({ lag, type: '生肖', prob: zStats.prob, val: `${prevZodiac}->${candidateZodiac}` });
+                totalScore += zScoreVal * this.weights.zScoreBase * lagDecay;
+                if (zScoreVal > 1.96) reasons.push({ lag, type: '生肖', prob: zStats.prob, val: `Z=${zScoreVal.toFixed(1)}` });
             }
 
             // --- B. 尾数规律 ---
             const tStats = this.getTransitionStats(this.matrices.tail, lag, prevNum % 10, candidate % 10, 10);
             const tExpected = 1 / 10;
-            const tDiff = tStats.prob - tExpected;
+            const tScoreVal = calculateZScore(tStats.prob, tExpected, tStats.total);
             if (tStats.total > 15 && tStats.count === 0) {
                 totalScore += (this.weights.killPenalty / 2) * lagDecay; 
             } else {
-                const weight = tDiff > tExpected * 0.5 ? this.weights.lagPattern : this.weights.lagBase;
-                totalScore += tDiff * 100 * weight * lagDecay;
-                if (tDiff > tExpected * 0.8) reasons.push({ lag, type: '尾数', prob: tStats.prob, val: `${prevNum%10}->${candidate%10}` });
+                totalScore += tScoreVal * this.weights.zScoreBase * lagDecay;
             }
+
+            // --- B2. 头数规律 (新增) ---
+            const headExpected = (getHead(candidate) === 0 ? 9 : 10) / 49;
+            const hStats = this.getTransitionStats(this.matrices.head, lag, getHead(prevNum), getHead(candidate), 5);
+            const hScoreVal = calculateZScore(hStats.prob, headExpected, hStats.total);
+            totalScore += hScoreVal * this.weights.zScoreBase * 0.8 * lagDecay;
 
             // --- C. 012路规律 ---
             const mStats = this.getTransitionStats(this.matrices.mod3, lag, getMod3(prevNum), getMod3(candidate), 3);
-            totalScore += (mStats.prob - 1/3) * 100 * this.weights.lagBase * lagDecay;
+            totalScore += calculateZScore(mStats.prob, 1/3, mStats.total) * this.weights.zScoreBase * 0.5 * lagDecay;
             
             // --- D. 维度规律 ---
             const oeStats = this.getTransitionStats(this.matrices.oddEven, lag, getOddEven(prevNum), getOddEven(candidate), 2);
-            totalScore += (oeStats.prob - 1/2) * 100 * this.weights.oddEvenBase * lagDecay;
+            totalScore += calculateZScore(oeStats.prob, 1/2, oeStats.total) * this.weights.zScoreBase * 0.4 * lagDecay;
             
             const bsStats = this.getTransitionStats(this.matrices.bigSmall, lag, getBigSmall(prevNum), getBigSmall(candidate), 2);
-            totalScore += (bsStats.prob - 1/2) * 100 * this.weights.bigSmallBase * lagDecay;
+            totalScore += calculateZScore(bsStats.prob, 1/2, bsStats.total) * this.weights.zScoreBase * 0.4 * lagDecay;
             
+            // --- E. 波色规律 ---
             const cStats = this.getTransitionStats(this.matrices.color, lag, prevColor, cInfo.color, 3);
             const cExpected = cInfo.color === 'red' ? 17/49 : (cInfo.color === 'blue' ? 16/49 : 16/49);
-            const cDiff = cStats.prob - cExpected;
-            totalScore += cDiff * 100 * this.weights.colorBase * lagDecay;
-            if (cDiff > cExpected * 0.5) reasons.push({ lag, type: '波色', prob: cStats.prob, val: `${prevColor}->${cInfo.color}` });
+            const cScoreVal = calculateZScore(cStats.prob, cExpected, cStats.total);
+            totalScore += cScoreVal * this.weights.zScoreBase * 1.2 * lagDecay;
+            if (cScoreVal > 1.96) reasons.push({ lag, type: '波色', prob: cStats.prob, val: `Z=${cScoreVal.toFixed(1)}` });
             
+            // --- F. 合数规律 ---
             const soeStats = this.getTransitionStats(this.matrices.sumOddEven, lag, getSumOddEven(prevNum), getSumOddEven(candidate), 2);
-            totalScore += (soeStats.prob - 1/2) * 100 * this.weights.sumOddEvenBase * lagDecay;
+            totalScore += calculateZScore(soeStats.prob, 1/2, soeStats.total) * this.weights.zScoreBase * 0.3 * lagDecay;
             
             const sbsStats = this.getTransitionStats(this.matrices.sumBigSmall, lag, getSumBigSmall(prevNum), getSumBigSmall(candidate), 2);
-            totalScore += (sbsStats.prob - 1/2) * 100 * this.weights.sumBigSmallBase * lagDecay;
+            totalScore += calculateZScore(sbsStats.prob, 1/2, sbsStats.total) * this.weights.zScoreBase * 0.3 * lagDecay;
             
-            // --- E. 邻号规律 ---
+            // --- G. 邻号规律 ---
             const isNeighbor = Math.abs(prevNum - candidate) === 1 || Math.abs(prevNum - candidate) === 48 ? 'yes' : 'no';
             const nStats = this.getTransitionStats(this.matrices.neighbor, lag, 'any', isNeighbor, 2);
             const nExpected = isNeighbor === 'yes' ? 2/49 : 47/49;
-            const nDiff = nStats.prob - nExpected;
-            if (isNeighbor === 'yes' && nDiff > 0) {
-                totalScore += nDiff * 100 * this.weights.neighborBase * lagDecay;
-                if (nDiff > nExpected * 1.0) reasons.push({ lag, type: '邻号', prob: nStats.prob, val: `跟随${prevNum}` });
+            const nScoreVal = calculateZScore(nStats.prob, nExpected, nStats.total);
+            if (isNeighbor === 'yes' && nScoreVal > 0) {
+                totalScore += nScoreVal * this.weights.zScoreBase * 0.8 * lagDecay;
             }
         }
 
