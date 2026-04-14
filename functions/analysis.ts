@@ -33,6 +33,7 @@ interface MatrixSet {
     zodiac: Record<number, Record<string, Record<string, number>>>;
     tail: Record<number, Record<number, Record<number, number>>>;
     head: Record<number, Record<number, Record<number, number>>>; // 新增头数矩阵
+    number: Record<number, Record<number, Record<number, number>>>; // 新增：特码到特码的精准转移
     mod3: Record<number, Record<number, Record<number, number>>>;
     oddEven: Record<number, Record<string, Record<string, number>>>;
     bigSmall: Record<number, Record<string, Record<string, number>>>;
@@ -55,6 +56,7 @@ class MultiLagEngine {
         zodiac: {},
         tail: {},
         head: {},
+        number: {},
         mod3: {},
         oddEven: {},
         bigSmall: {},
@@ -75,7 +77,7 @@ class MultiLagEngine {
         reversion: 35,     // 极冷回补奖励
         zScoreBase: 12.0,  // Z-Score 基础乘数 (替代原有的 lagBase/lagPattern)
         macroOmission: 4.0,// 宏观遗漏补偿 (生肖/波色整体遗漏)
-        flatStrategy: 10,  // 平特
+        flatStrategy: 40,  // 平特 (大幅增强，利用上期平码尾数)
         killPenalty: -60,  // 绝杀惩罚
         overheatPenalty: -30, // 过热惩罚
     };
@@ -105,6 +107,8 @@ class MultiLagEngine {
         for (let lag = 1; lag <= MAX_LAG_SCAN; lag++) {
             this.matrices.zodiac[lag] = {};
             this.matrices.tail[lag] = {};
+            this.matrices.head[lag] = {};
+            this.matrices.number[lag] = {};
             this.matrices.mod3[lag] = {};
             this.matrices.oddEven[lag] = {};
             this.matrices.bigSmall[lag] = {};
@@ -202,6 +206,7 @@ class MultiLagEngine {
                             this.record(this.matrices.zodiac, lag, prevZodiac, curZodiac);
                             this.record(this.matrices.tail, lag, prevNum % 10, curNum % 10);
                             this.record(this.matrices.head, lag, getHead(prevNum), getHead(curNum));
+                            this.record(this.matrices.number, lag, prevNum, curNum);
                             this.record(this.matrices.mod3, lag, getMod3(prevNum), getMod3(curNum));
                             this.record(this.matrices.oddEven, lag, getOddEven(prevNum), getOddEven(curNum));
                             this.record(this.matrices.bigSmall, lag, getBigSmall(prevNum), getBigSmall(curNum));
@@ -233,79 +238,6 @@ class MultiLagEngine {
         // 计算平特概率
         if (this.flatTailStats.totalCount > 0) {
             this.flatTailStats.probability = this.flatTailStats.hitCount / this.flatTailStats.totalCount;
-        }
-    }
-
-    // --- 自动回测与权重调整 ---
-    private performAutoBacktest() {
-        // 我们对最近 50 期进行快速回测，看哪些指标最准
-        const TEST_COUNT = Math.min(50, this.history.length - 15);
-        if (TEST_COUNT < 10) return;
-
-        let scores = {
-            hotFreq: 0,    // 热号命中率
-            coldOmission: 0, // 冷号回补率
-            pattern: 0,    // 规律命中率
-            flat: 0        // 平特命中率
-        };
-
-        // 模拟回测
-        const avgFreq = Object.values(this.globalFreq).reduce((a, b) => a + b, 0) / 49;
-
-        for (let i = 0; i < TEST_COUNT; i++) {
-            const targetDraw = this.history[i];
-            const targetNum = parseInt(targetDraw.specialNumber);
-            if (isNaN(targetNum)) continue;
-
-            // 1. 检查是否是热号 (在当时看来)
-            if (this.globalFreq[targetNum] > avgFreq * 1.1) {
-                scores.hotFreq++;
-            }
-
-            // 2. 检查是否是冷号回补
-            if (this.avgOmission[targetNum] > 12) {
-                scores.coldOmission++;
-            }
-
-            // 3. 检查规律 (Pattern)
-            const prevDraw = this.history[i + 1];
-            if (prevDraw) {
-                const prevNum = parseInt(prevDraw.specialNumber);
-                if (!isNaN(prevNum)) {
-                    const prevZodiac = getZodiacByYear(prevNum, prevDraw.date);
-                    const targetZodiac = getZodiacByYear(targetNum, targetDraw.date);
-                    if (prevZodiac && targetZodiac) {
-                        const stats = this.getTransitionStats(this.matrices.zodiac, 1, prevZodiac, targetZodiac, 12);
-                        if (stats.prob > 0.12) scores.pattern++;
-                    }
-                }
-            }
-        }
-
-        // --- 动态调整权重 ---
-        // 如果热号命中率高 (> 25%)，大幅增加频率权重
-        if (scores.hotFreq / TEST_COUNT > 0.25) {
-            this.weights.freq = 25; 
-            this.weights.recentTrend = 30;
-            this.weights.omission = -5; 
-        } else {
-            // 如果热号不准，说明在走冷态，减少热号权重，增加冷号回补奖励
-            this.weights.freq = 8;
-            this.weights.recentTrend = 10;
-            this.weights.reversion = 40;
-        }
-
-        // 如果规律命中率高
-        if (scores.pattern / TEST_COUNT > 0.15) {
-            this.weights.lagPattern = 45; 
-            this.weights.lagBase = 15;
-        }
-
-        // 平特策略调整
-        if (this.flatTailStats.probability > 0.5) {
-            this.weights.flatStrategy = 25;
-        } else {
-            this.weights.flatStrategy = 5;
         }
     }
 
@@ -346,6 +278,25 @@ class MultiLagEngine {
         let totalScore = 0;
         let reasons: { lag: number, type: string, prob: number, val: string }[] = [];
 
+        // --- 0. 计算宏观遗漏 (生肖、波色、尾数整体遗漏) ---
+        const zOmission: Record<string, number> = {};
+        const cOmission: Record<string, number> = {};
+        const tOmission: Record<number, number> = {};
+        ZODIACS.forEach(z => zOmission[z] = 100);
+        ['red', 'blue', 'green'].forEach(c => cOmission[c] = 100);
+        for (let i = 0; i <= 9; i++) tOmission[i] = 100;
+        
+        for (let i = 0; i < referenceDraws.length; i++) {
+            const num = parseInt(referenceDraws[i].specialNumber);
+            if (isNaN(num)) continue;
+            const z = getZodiacByYear(num, referenceDraws[i].date);
+            const c = NUMBER_MAP[num]?.color;
+            const t = num % 10;
+            if (z && zOmission[z] === 100) zOmission[z] = i;
+            if (c && cOmission[c] === 100) cOmission[c] = i;
+            if (tOmission[t] === 100) tOmission[t] = i;
+        }
+
         // --- 1. 统计学基础分 (权重最高) ---
         
         // A. 频率得分 (Frequency)
@@ -383,12 +334,38 @@ class MultiLagEngine {
             }
         }
 
-        // --- 1.5 宏观遗漏补偿 (Zodiac/Color) ---
+        // --- 1.5 宏观遗漏补偿 (Zodiac/Color/Tail) ---
         if (zOmission[candidateZodiac] > 4) {
             totalScore += (zOmission[candidateZodiac] - 4) * this.weights.macroOmission;
         }
         if (cOmission[cInfo.color] > 2) {
             totalScore += (cOmission[cInfo.color] - 2) * this.weights.macroOmission * 1.5;
+        }
+        if (tOmission[candidate % 10] > 6) {
+            totalScore += (tOmission[candidate % 10] - 6) * this.weights.macroOmission * 2.0;
+        }
+
+        // --- 1.6 短期连开趋势 (Phase Alignment) ---
+        if (referenceDraws.length >= 3) {
+            const last1 = parseInt(referenceDraws[0].specialNumber);
+            const last2 = parseInt(referenceDraws[1].specialNumber);
+            const last3 = parseInt(referenceDraws[2].specialNumber);
+            
+            if (!isNaN(last1) && !isNaN(last2) && !isNaN(last3)) {
+                // 连大/连小
+                if (getBigSmall(last1) === getBigSmall(last2) && getBigSmall(last2) === getBigSmall(last3)) {
+                    if (getBigSmall(candidate) === getBigSmall(last1)) {
+                        totalScore += 15; // 顺势而为
+                        reasons.push({ lag: 1, type: '短期趋势', prob: 0.6, val: `连开${getBigSmall(last1) === 'big' ? '大' : '小'}` });
+                    }
+                }
+                // 连单/连双
+                if (getOddEven(last1) === getOddEven(last2) && getOddEven(last2) === getOddEven(last3)) {
+                    if (getOddEven(candidate) === getOddEven(last1)) {
+                        totalScore += 15;
+                    }
+                }
+            }
         }
 
         // --- 2. 遍历所有滞后周期 ---
@@ -468,17 +445,34 @@ class MultiLagEngine {
             if (isNeighbor === 'yes' && nScoreVal > 0) {
                 totalScore += nScoreVal * this.weights.zScoreBase * 0.8 * lagDecay;
             }
+
+            // --- H. 精准特码转移 (新增) ---
+            const numStats = this.getTransitionStats(this.matrices.number, lag, prevNum, candidate, 49);
+            const numExpected = 1 / 49;
+            const numScoreVal = calculateZScore(numStats.prob, numExpected, numStats.total);
+            if (numScoreVal > 0) {
+                totalScore += numScoreVal * this.weights.zScoreBase * 2.0 * lagDecay; // 高权重，因为极难触发
+                if (numScoreVal > 1.5) reasons.push({ lag, type: '精准特码', prob: numStats.prob, val: `${prevNum}->${candidate}` });
+            }
         }
 
         // 3. 平特关联 (只看 T-1)
         if (referenceDraws.length > 0 && referenceDraws[0].numbers) {
             const prevTails = referenceDraws[0].numbers.map((n: any) => parseInt(n) % 10);
+            const prevZodiacs = referenceDraws[0].numbers.map((n: any) => getZodiacByYear(parseInt(n), referenceDraws[0].date)).filter(Boolean);
+
             if (prevTails.includes(candidate % 10)) {
-                const flatExpected = prevTails.length / 10;
-                const flatDiff = this.flatTailStats.probability - flatExpected;
-                if (flatDiff > 0) {
-                    totalScore += flatDiff * 100 * this.weights.flatStrategy;
-                }
+                // 增强逻辑：直接使用历史真实命中率作为加分依据，大幅提高权重
+                // 期望概率大约是 6/10 = 60% (假设6个平码尾数不重复)
+                const hitRate = this.flatTailStats.probability || 0.5;
+                totalScore += hitRate * this.weights.flatStrategy * 2.0; // 翻倍权重
+                reasons.push({ lag: 1, type: '平码落尾', prob: hitRate, val: `包含尾数${candidate % 10}` });
+            }
+
+            if (prevZodiacs.includes(candidateZodiac)) {
+                // 平码落肖
+                totalScore += this.weights.flatStrategy * 1.5;
+                reasons.push({ lag: 1, type: '平码落肖', prob: 0.5, val: `包含生肖${candidateZodiac}` });
             }
         }
 
