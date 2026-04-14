@@ -18,6 +18,17 @@ const getBigSmall = (num: number): string => num >= 25 ? 'big' : 'small';
 const getSumOddEven = (num: number): string => getDigitSum(num) % 2 === 0 ? 'even' : 'odd';
 const getSumBigSmall = (num: number): string => getDigitSum(num) >= 7 ? 'big' : 'small';
 const getHead = (num: number): number => Math.floor(num / 10);
+const getSumValue = (num: number): number => Math.floor(num / 10) + (num % 10);
+
+const getPoultryBeast = (zodiac: string): string => {
+    const poultry = ['牛', '马', '羊', '鸡', '狗', '猪'];
+    return poultry.includes(zodiac) ? 'poultry' : 'beast';
+};
+
+const getMaleFemale = (zodiac: string): string => {
+    const male = ['鼠', '牛', '虎', '龙', '马', '猴', '狗'];
+    return male.includes(zodiac) ? 'male' : 'female';
+};
 
 // 计算 Z-Score (标准分数)，用于衡量概率的统计显著性，自动惩罚小样本噪音
 const calculateZScore = (prob: number, expected: number, total: number): number => {
@@ -41,6 +52,10 @@ interface MatrixSet {
     sumOddEven: Record<number, Record<string, Record<string, number>>>;
     sumBigSmall: Record<number, Record<string, Record<string, number>>>;
     neighbor: Record<number, Record<string, Record<string, number>>>; // 邻号规律 (prevNum -> candidate is neighbor?)
+    wuxing: Record<number, Record<string, Record<string, number>>>;
+    sumValue: Record<number, Record<number, Record<number, number>>>;
+    poultryBeast: Record<number, Record<string, Record<string, number>>>;
+    maleFemale: Record<number, Record<string, Record<string, number>>>;
 }
 
 // --- 核心分析引擎 ---
@@ -63,7 +78,11 @@ class MultiLagEngine {
         color: {},
         sumOddEven: {},
         sumBigSmall: {},
-        neighbor: {}
+        neighbor: {},
+        wuxing: {},
+        sumValue: {},
+        poultryBeast: {},
+        maleFemale: {}
     };
 
     // 3. 平特关联
@@ -116,6 +135,10 @@ class MultiLagEngine {
             this.matrices.sumOddEven[lag] = {};
             this.matrices.sumBigSmall[lag] = {};
             this.matrices.neighbor[lag] = {};
+            this.matrices.wuxing[lag] = {};
+            this.matrices.sumValue[lag] = {};
+            this.matrices.poultryBeast[lag] = {};
+            this.matrices.maleFemale[lag] = {};
         }
     }
 
@@ -214,6 +237,12 @@ class MultiLagEngine {
                             this.record(this.matrices.sumOddEven, lag, getSumOddEven(prevNum), getSumOddEven(curNum));
                             this.record(this.matrices.sumBigSmall, lag, getSumBigSmall(prevNum), getSumBigSmall(curNum));
                             
+                            // 新增维度
+                            this.record(this.matrices.wuxing, lag, prevColor ? NUMBER_MAP[prevNum]?.wuxing : '', curColor ? NUMBER_MAP[curNum]?.wuxing : '');
+                            this.record(this.matrices.sumValue, lag, getSumValue(prevNum), getSumValue(curNum));
+                            this.record(this.matrices.poultryBeast, lag, getPoultryBeast(prevZodiac), getPoultryBeast(curZodiac));
+                            this.record(this.matrices.maleFemale, lag, getMaleFemale(prevZodiac), getMaleFemale(curZodiac));
+
                             // 邻号关系 (prevNum -> curNum 是否是邻号)
                             const isNeighbor = Math.abs(prevNum - curNum) === 1 || Math.abs(prevNum - curNum) === 48 ? 'yes' : 'no';
                             this.record(this.matrices.neighbor, lag, 'any', isNeighbor);
@@ -446,7 +475,31 @@ class MultiLagEngine {
                 totalScore += nScoreVal * this.weights.zScoreBase * 0.8 * lagDecay;
             }
 
-            // --- H. 精准特码转移 (新增) ---
+            // --- H. 五行规律 ---
+            const prevWuxing = NUMBER_MAP[prevNum]?.wuxing;
+            const curWuxing = cInfo.wuxing;
+            if (prevWuxing && curWuxing) {
+                const wxStats = this.getTransitionStats(this.matrices.wuxing, lag, prevWuxing, curWuxing, 5);
+                const wxExpected = 1 / 5; // 粗略期望
+                const wxScoreVal = calculateZScore(wxStats.prob, wxExpected, wxStats.total);
+                totalScore += wxScoreVal * this.weights.zScoreBase * 0.6 * lagDecay;
+            }
+
+            // --- I. 合数规律 (精确合数 0-18) ---
+            const svStats = this.getTransitionStats(this.matrices.sumValue, lag, getSumValue(prevNum), getSumValue(candidate), 15);
+            // 合数期望概率不同，例如合数7有 07, 16, 25, 34, 43 (5个)，合数1有 01, 10 (2个)
+            // 这里简化处理，统一用 Z-Score 评估相对显著性
+            const svScoreVal = calculateZScore(svStats.prob, 1/15, svStats.total);
+            totalScore += svScoreVal * this.weights.zScoreBase * 0.5 * lagDecay;
+
+            // --- J. 家禽野兽 / 男女肖 ---
+            const pbStats = this.getTransitionStats(this.matrices.poultryBeast, lag, getPoultryBeast(prevZodiac), getPoultryBeast(candidateZodiac), 2);
+            totalScore += calculateZScore(pbStats.prob, 1/2, pbStats.total) * this.weights.zScoreBase * 0.4 * lagDecay;
+
+            const mfStats = this.getTransitionStats(this.matrices.maleFemale, lag, getMaleFemale(prevZodiac), getMaleFemale(candidateZodiac), 2);
+            totalScore += calculateZScore(mfStats.prob, 1/2, mfStats.total) * this.weights.zScoreBase * 0.4 * lagDecay;
+
+            // --- K. 精准特码转移 ---
             const numStats = this.getTransitionStats(this.matrices.number, lag, prevNum, candidate, 49);
             const numExpected = 1 / 49;
             const numScoreVal = calculateZScore(numStats.prob, numExpected, numStats.total);
