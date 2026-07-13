@@ -87,6 +87,7 @@ class MultiLagEngine {
 
     // 3. 平特关联
     flatTailStats = { hitCount: 0, totalCount: 0, probability: 0 };
+    flatZodiacStats = { hitCount: 0, totalCount: 0, probability: 0 };
 
     // 4. 优化后的静态权重矩阵 (引入 Z-Score 标准分模型)
     weights = {
@@ -105,6 +106,11 @@ class MultiLagEngine {
     omission: Record<number, number> = {}; // 当前遗漏
     avgOmission: Record<number, number> = {}; // 平均遗漏
     momentum: Record<number, number> = {}; // 近期动能 (近15期命中次数)
+
+    // 6. 宏观遗漏统计
+    zOmission: Record<string, number> = {};
+    cOmission: Record<string, number> = {};
+    tOmission: Record<number, number> = {};
 
     constructor(history: any[]) {
         this.history = history;
@@ -180,7 +186,7 @@ class MultiLagEngine {
             if (gaps.length > 0) {
                 this.avgOmission[n] = gaps.reduce((a, b) => a + b, 0) / gaps.length;
             } else {
-                this.avgOmission[n] = total;
+                this.avgOmission[n] = 49; // 修复：使用六合彩特码的理论期望平均遗漏(49)，防止号码从未出现带来的计算偏差与惩罚失效
             }
         }
 
@@ -251,14 +257,21 @@ class MultiLagEngine {
                 }
             }
 
-            // 平特尾数关联 (仅看上期 T-1)
+            // 平特尾数与生肖关联 (仅看上期 T-1)
             if (i < total - 1) {
                 const prevDraw = this.history[i + 1];
                 if (Array.isArray(prevDraw.numbers)) {
                     const prevFlatTails = prevDraw.numbers.map((n: number) => n % 10);
+                    const prevFlatZodiacs = prevDraw.numbers.map((n: number) => getZodiacByYear(n, prevDraw.date)).filter(Boolean);
+
                     this.flatTailStats.totalCount++;
                     if (prevFlatTails.includes(curNum % 10)) {
                         this.flatTailStats.hitCount++;
+                    }
+
+                    this.flatZodiacStats.totalCount++;
+                    if (prevFlatZodiacs.includes(curZodiac)) {
+                        this.flatZodiacStats.hitCount++;
                     }
                 }
             }
@@ -267,6 +280,25 @@ class MultiLagEngine {
         // 计算平特概率
         if (this.flatTailStats.totalCount > 0) {
             this.flatTailStats.probability = this.flatTailStats.hitCount / this.flatTailStats.totalCount;
+        }
+        if (this.flatZodiacStats.totalCount > 0) {
+            this.flatZodiacStats.probability = this.flatZodiacStats.hitCount / this.flatZodiacStats.totalCount;
+        }
+
+        // --- 4. 统计生肖、波色、尾数在整体历史中的宏观遗漏期数 (无偏估计，避免短期16期数据窗口造成的假100期偏差) ---
+        ZODIACS.forEach(z => this.zOmission[z] = total);
+        ['red', 'blue', 'green'].forEach(c => this.cOmission[c] = total);
+        for (let i = 0; i <= 9; i++) this.tOmission[i] = total;
+
+        for (let i = 0; i < total; i++) {
+            const num = parseInt(this.history[i].specialNumber);
+            if (isNaN(num)) continue;
+            const z = getZodiacByYear(num, this.history[i].date);
+            const c = NUMBER_MAP[num]?.color;
+            const t = num % 10;
+            if (z && this.zOmission[z] === total) this.zOmission[z] = i;
+            if (c && this.cOmission[c] === total) this.cOmission[c] = i;
+            if (this.tOmission[t] === total) this.tOmission[t] = i;
         }
     }
 
@@ -307,25 +339,6 @@ class MultiLagEngine {
         let totalScore = 0;
         let reasons: { lag: number, type: string, prob: number, val: string }[] = [];
 
-        // --- 0. 计算宏观遗漏 (生肖、波色、尾数整体遗漏) ---
-        const zOmission: Record<string, number> = {};
-        const cOmission: Record<string, number> = {};
-        const tOmission: Record<number, number> = {};
-        ZODIACS.forEach(z => zOmission[z] = 100);
-        ['red', 'blue', 'green'].forEach(c => cOmission[c] = 100);
-        for (let i = 0; i <= 9; i++) tOmission[i] = 100;
-        
-        for (let i = 0; i < referenceDraws.length; i++) {
-            const num = parseInt(referenceDraws[i].specialNumber);
-            if (isNaN(num)) continue;
-            const z = getZodiacByYear(num, referenceDraws[i].date);
-            const c = NUMBER_MAP[num]?.color;
-            const t = num % 10;
-            if (z && zOmission[z] === 100) zOmission[z] = i;
-            if (c && cOmission[c] === 100) cOmission[c] = i;
-            if (tOmission[t] === 100) tOmission[t] = i;
-        }
-
         // --- 1. 统计学基础分 (权重最高) ---
         
         // A. 频率得分 (Frequency)
@@ -364,14 +377,14 @@ class MultiLagEngine {
         }
 
         // --- 1.5 宏观遗漏补偿 (Zodiac/Color/Tail) ---
-        if (zOmission[candidateZodiac] > 4) {
-            totalScore += (zOmission[candidateZodiac] - 4) * this.weights.macroOmission;
+        if (this.zOmission[candidateZodiac] > 4) {
+            totalScore += (this.zOmission[candidateZodiac] - 4) * this.weights.macroOmission;
         }
-        if (cOmission[cInfo.color] > 2) {
-            totalScore += (cOmission[cInfo.color] - 2) * this.weights.macroOmission * 1.5;
+        if (this.cOmission[cInfo.color] > 2) {
+            totalScore += (this.cOmission[cInfo.color] - 2) * this.weights.macroOmission * 1.5;
         }
-        if (tOmission[candidate % 10] > 6) {
-            totalScore += (tOmission[candidate % 10] - 6) * this.weights.macroOmission * 2.0;
+        if (this.tOmission[candidate % 10] > 6) {
+            totalScore += (this.tOmission[candidate % 10] - 6) * this.weights.macroOmission * 2.0;
         }
 
         // --- 1.6 短期连开趋势 (Phase Alignment) ---
@@ -411,7 +424,11 @@ class MultiLagEngine {
             if (!prevZodiac || !prevColor) continue;
 
             // 基础权重衰减 (使用更陡峭的指数级衰减，防止深层噪音淹没近期强信号)
-            const lagDecay = 1 / Math.pow(lag, 1.5); 
+            // 引入 Harmonic Boost 强化特定周期律 (如 3, 5, 8, 12 等黄金比例或标准周期律，让这些周期对规律具有更高的敏感度)
+            let lagDecay = 1 / Math.pow(lag, 1.5); 
+            if ([3, 5, 8, 12].includes(lag)) {
+                lagDecay *= 1.35; // 强化周期敏感度 35%
+            } 
 
             // --- A. 生肖规律 ---
             const zStats = this.getTransitionStats(this.matrices.zodiac, lag, prevZodiac, candidateZodiac, 12);
@@ -523,9 +540,10 @@ class MultiLagEngine {
             }
 
             if (prevZodiacs.includes(candidateZodiac)) {
-                // 平码落肖
-                totalScore += this.weights.flatStrategy * 1.5;
-                reasons.push({ lag: 1, type: '平码落肖', prob: 0.5, val: `包含生肖${candidateZodiac}` });
+                // 平码落肖 (动态根据历史真实的平码落肖概率进行加权)
+                const hitRate = this.flatZodiacStats.probability || 0.5;
+                totalScore += hitRate * this.weights.flatStrategy * 1.5;
+                reasons.push({ lag: 1, type: '平码落肖', prob: hitRate, val: `包含生肖${candidateZodiac}` });
             }
         }
 
